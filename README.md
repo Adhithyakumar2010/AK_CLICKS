@@ -157,37 +157,37 @@ http://127.0.0.1:5000
 # 📸 Application Screenshots
 
 ## 🏠 Home Page
-![Home Page](screenshots/1.%20Home%20Page.png)
+![Home Page](screenshots/1.Home-Page.png)
 
 ## 📷 Photography Portfolio
-![Photography Portfolio](screenshots/2.%20Photography%20Portfolio.png)
+![Photography Portfolio](screenshots/2.Photography-Portfolio.png)
 
 ## 📅 Booking Page
-![Booking Page](screenshots/3.%20Booking%20Page.png)
+![Booking Page](screenshots/3.Booking-Page.png)
 
 ## 📚 Story Shop
-![Story Shop](screenshots/4.%20Story%20Shop.png)
+![Story Shop](screenshots/4.Story-Shop.png)
 
 ## 🔐 Login Page
-![Login Page](screenshots/5.%20Login%20Page.png)
+![Login Page](screenshots/5.Login-Page.png)
 
 ## 🛒 Shopping Cart
-![Shopping Cart](screenshots/6.%20Shopping%20Cart.png)
+![Shopping Cart](screenshots/6.Shopping-Cart.png)
 
 ## 💳 Payment Page (Photography)
-![Payment Photography](screenshots/7.%20Payment%20Page%20for%20Booking%20Photography.png)
+![Payment Photography](screenshots/7.Payment-Page-for-Booking-Photography.png)
 
 ## 💳 Payment Page (Book Store)
-![Payment Book Store](screenshots/8.%20Payment%20Page%20for%20Book%20Store.png)
+![Payment Book Store](screenshots/8.Payment-Page-for-Book-Store.png)
 
 ## 📄 PDF Receipt (Book Store)
-![Book Store Receipt](screenshots/9.%20PDF%20Receipt%20for%20Book%20store.png)
+![Book Store Receipt](screenshots/9.PDF-Receipt-for-Book-store.png)
 
 ## 📄 PDF Receipt (Photography)
-![Photography Receipt](screenshots/10.%20PDF%20Receipt%20for%20Photography.png)
+![Photography Receipt](screenshots/10.PDF-Receipt-for-Photography.png)
 
 ## ⚙️ Admin Dashboard
-![Admin Dashboard](screenshots/11.%20Admin%20Dashboard.png)
+![Admin Dashboard](screenshots/11.Admin-Dashboard.png)
 
 ---
 
