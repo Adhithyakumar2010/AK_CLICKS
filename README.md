@@ -7,6 +7,20 @@ The application allows customers to browse photography services, book sessions, 
 
 ---
 
+## 🌐 Live Demo
+
+🚀 **Live Website:** https://ak-clicks.onrender.com
+
+🚧 **Coming Soon** (Deployment in progress)
+
+📂 **GitHub Repository:** https://github.com/Adhithyakumar2010/AK_CLICKS
+
+📥 Download the complete project report:
+
+- [AK CLICKS Project Report](docs/AK_CLICKS_Complete_Project_Report.pdf)
+
+---
+
 ## 🚀 Features
 
 ### 📷 Photography Portfolio
