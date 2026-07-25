@@ -154,28 +154,40 @@ http://127.0.0.1:5000
 
 # 📸 Screenshots
 
-Add screenshots of the following pages:
+# 📸 Application Screenshots
 
-- Home Page
-- Photography Gallery
-- Booking Page
-- Story Shop
-- Login Page
-- Payment Page
-- Admin Dashboard
+## 🏠 Home Page
+![Home Page](screenshots/1.%20Home%20Page.png)
 
-Example:
+## 📷 Photography Portfolio
+![Photography Portfolio](screenshots/2.%20Photography%20Portfolio.png)
 
-```
-screenshots/
-│
-├── home.png
-├── booking.png
-├── gallery.png
-├── shop.png
-├── payment.png
-└── admin.png
-```
+## 📅 Booking Page
+![Booking Page](screenshots/3.%20Booking%20Page.png)
+
+## 📚 Story Shop
+![Story Shop](screenshots/4.%20Story%20Shop.png)
+
+## 🔐 Login Page
+![Login Page](screenshots/5.%20Login%20Page.png)
+
+## 🛒 Shopping Cart
+![Shopping Cart](screenshots/6.%20Shopping%20Cart.png)
+
+## 💳 Payment Page (Photography)
+![Payment Photography](screenshots/7.%20Payment%20Page%20for%20Booking%20Photography.png)
+
+## 💳 Payment Page (Book Store)
+![Payment Book Store](screenshots/8.%20Payment%20Page%20for%20Book%20Store.png)
+
+## 📄 PDF Receipt (Book Store)
+![Book Store Receipt](screenshots/9.%20PDF%20Receipt%20for%20Book%20store.png)
+
+## 📄 PDF Receipt (Photography)
+![Photography Receipt](screenshots/10.%20PDF%20Receipt%20for%20Photography.png)
+
+## ⚙️ Admin Dashboard
+![Admin Dashboard](screenshots/11.%20Admin%20Dashboard.png)
 
 ---
 
