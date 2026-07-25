@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>The Story Shop | AK CLICKS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='css/story-store.css') }}">
+</head>
+<body class="shop-page">
+  <header class="site-header shop-header">
+    <a class="story-brand" href="{{ url_for('shop') }}"><img src="{{ url_for('static', filename='images/story-store/logo.png') }}" alt="The Story Shop"><span>The Story Shop</span></a>
+    <button class="menu-toggle" aria-label="Open menu">Menu</button>
+    <nav><a href="{{ url_for('home') }}">AK CLICKS</a><a href="{{ url_for('home') }}#booking">Book photography</a><a href="#products">Books</a><a class="nav-book" href="#products">Browse collection</a></nav>
+  </header>
+  <main>
+    <section class="shop-hero story-hero"><div><p class="eyebrow">A project by AK CLICKS</p><h1>Every book opens a world.</h1><p>Welcome to The Story Shop: a home for unforgettable novels, favourite genres and your next great read.</p><a class="button" href="#products">Explore books</a></div><img src="{{ url_for('static', filename='images/story-store/about-img.png') }}" alt="The Story Shop illustration"></section>
+    <section class="book-feature"><article><img src="{{ url_for('static', filename='images/story-store/category1-img.jpg') }}" alt="A Love in Hate"><p>Reader favourite</p><h2>A Love in Hate</h2></article><article><img src="{{ url_for('static', filename='images/story-store/category2-img.jpg') }}" alt="The Day We Met"><p>Reader favourite</p><h2>The Day We Met</h2></article><article><img src="{{ url_for('static', filename='images/story-store/category3-img.jpg') }}" alt="The Castle in the Moonlight"><p>Reader favourite</p><h2>The Moonlight</h2></article></section>
+    <section class="shop-title" id="products"><p class="eyebrow">The library</p><h2>Books & novels available now.</h2><p>Choose a story, add it to your bag and send an order request directly to us.</p></section>
+    <section class="product-grid">{% for product in products %}<article class="product"><img src="{{ url_for('static', filename=product.image) }}" alt="{{ product.name }}"><h2>{{ product.name }}</h2><p class="product-category">{{ product.category }}</p><p>{{ product.description }}</p><div class="product-bottom"><span class="product-price">₹{{ '{:,.0f}'.format(product.price) }}</span><button class="button" data-add="{{ product.id }}">Add to bag</button></div></article>{% endfor %}</section>
+  </main>
+  <button class="cart-bar" type="button">Bag (0) · ₹0</button>
+  <aside class="cart-drawer" aria-label="Shopping bag"><div class="cart-head"><h2>Your bag</h2><button class="cart-close" type="button" aria-label="Close bag">×</button></div><div class="cart-items"></div><div class="cart-total"><span>Total</span><strong>₹0</strong></div><form class="cart-form" action="{{ url_for('order') }}" method="post"><input type="hidden" name="items"><input type="hidden" name="total"><label>Your name<input name="customer_name" required autocomplete="name"></label><label>Email<input type="email" name="email" required autocomplete="email"></label><label>Phone<input type="tel" name="phone" required autocomplete="tel"></label><label>Delivery address<textarea name="address" required rows="3"></textarea></label><button class="button" type="submit">Place order request →</button></form></aside>
+  <footer><a class="story-brand" href="{{ url_for('shop') }}"><img src="{{ url_for('static', filename='images/story-store/logo.png') }}" alt=""><span>The Story Shop</span></a><p>A little shelf for big imaginations.</p><div><a href="{{ url_for('home') }}">AK CLICKS</a><a href="mailto:adhiats@gmail.com">Email</a></div><small>© {{ year }} The Story Shop. All rights reserved.</small></footer>
+  <script id="products-data" type="application/json">{{ products|tojson }}</script><script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body></html>
