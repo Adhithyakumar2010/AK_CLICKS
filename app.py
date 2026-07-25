@@ -14,6 +14,8 @@ from reportlab.pdfgen import canvas
 from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
+with app.app_context():
+    init_db()
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-before-production")
 BOOKING_DEPOSIT = int(os.environ.get("BOOKING_DEPOSIT", "2000"))
 UPI_ID = os.environ.get("UPI_ID", "your-upi-id@bank")
@@ -198,4 +200,5 @@ def update_order(order_id):
 @app.route("/logout")
 def logout(): session.clear();return redirect(url_for("login"))
 
-if __name__ == "__main__": init_db();app.run(debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
