@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Customer Dashboard | AK CLICKS</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+
+<div class="confirmation-card">
+
+    <h1>Welcome, {{ customer["name"] }}</h1>
+
+    <p>Email : {{ customer["email"] }}</p>
+
+    <hr>
+
+    <h2>Your Bookings</h2>
+
+    {% if bookings %}
+
+        <table border="1" cellpadding="10">
+
+            <tr>
+                <th>ID</th>
+                <th>Service</th>
+                <th>Date</th>
+                <th>Status</th>
+            </tr>
+
+            {% for booking in bookings %}
+
+            <tr>
+
+                <td>{{ booking["id"] }}</td>
+
+                <td>{{ booking["service"] }}</td>
+
+                <td>{{ booking["booking_date"] }}</td>
+
+                <td>{{ booking["status"] }}</td>
+
+            </tr>
+
+            {% endfor %}
+
+        </table>
+
+    {% else %}
+
+        <p>No bookings found.</p>
+
+    {% endif %}
+
+    <br>
+
+    <h2>Your Orders</h2>
+
+    {% if orders %}
+
+        <table border="1" cellpadding="10">
+
+            <tr>
+
+                <th>ID</th>
+
+                <th>Items</th>
+
+                <th>Total</th>
+
+                <th>Status</th>
+
+            </tr>
+
+            {% for order in orders %}
+
+            <tr>
+
+                <td>{{ order["id"] }}</td>
+
+                <td>{{ order["items"] }}</td>
+
+                <td>₹{{ order["total"] }}</td>
+
+                <td>{{ order["status"] }}</td>
+
+            </tr>
+
+            {% endfor %}
+
+        </table>
+
+    {% else %}
+
+        <p>No orders found.</p>
+
+    {% endif %}
+
+    <br>
+
+    <a href="{{ url_for('shop') }}" class="button">
+        Story Store
+    </a>
+
+    <a href="{{ url_for('home') }}" class="button">
+        Home
+    </a>
+
+    <a href="{{ url_for('customer_logout') }}" class="button">
+        Logout
+    </a>
+
+</div>
+
+</body>
+</html>

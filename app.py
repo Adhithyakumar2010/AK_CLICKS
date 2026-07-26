@@ -147,10 +147,10 @@ def account():
                 if not name or not email or len(password) < 6: flash("Use a name, valid email and at least 6-character password.", "error")
                 elif conn.execute("SELECT 1 FROM customers WHERE email=?", (email,)).fetchone(): flash("An account already uses this email.", "error")
                 else:
-                    cursor=conn.execute("INSERT INTO customers (name,email,password_hash) VALUES (?,?,?)",(name,email,generate_password_hash(password))); session["customer_id"]=cursor.lastrowid; session["customer_name"]=name; return redirect(url_for("account"))
+                    cursor=conn.execute("INSERT INTO customers (name,email,password_hash) VALUES (?,?,?)",(name,email,generate_password_hash(password))); session["customer_id"]=cursor.lastrowid; session["customer_name"]=name; return redirect(url_for("customer_home"))
             else:
                 customer=conn.execute("SELECT * FROM customers WHERE email=?",(email,)).fetchone()
-                if customer and check_password_hash(customer["password_hash"], password): session["customer_id"]=customer["id"];session["customer_name"]=customer["name"];return redirect(url_for("account"))
+                if customer and check_password_hash(customer["password_hash"], password): session["customer_id"]=customer["id"];session["customer_name"]=customer["name"];return redirect(url_for("customer_home"))
                 flash("Invalid email or password.", "error")
     orders=[]
     if session.get("customer_id"):
@@ -159,6 +159,34 @@ def account():
 
 @app.route("/account/logout")
 def customer_logout(): session.pop("customer_id",None);session.pop("customer_name",None);return redirect(url_for("home"))
+
+@app.route("/customer")
+def customer_home():
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+
+    with db_connection() as conn:
+        customer = conn.execute(
+            "SELECT * FROM customers WHERE id=?",
+            (session["customer_id"],)
+        ).fetchone()
+
+        orders = conn.execute(
+            "SELECT * FROM orders WHERE customer_id=? ORDER BY id DESC",
+            (session["customer_id"],)
+        ).fetchall()
+
+        bookings = conn.execute(
+            "SELECT * FROM bookings WHERE email=? ORDER BY id DESC",
+            (customer["email"],)
+        ).fetchall()
+
+    return render_template(
+        "customer_home.html",
+        customer=customer,
+        orders=orders,
+        bookings=bookings
+    )
 
 @app.route("/login", methods=["GET","POST"])
 def login():
