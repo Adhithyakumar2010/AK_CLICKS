@@ -107,7 +107,13 @@ def order():
             flash("One or more books are unavailable. Please refresh your bag.", "error"); return redirect(url_for("shop"))
         total = sum(all_products[name]["price"] * quantity for name, quantity in requested.items())
         for name, quantity in requested.items(): conn.execute("UPDATE products SET stock=stock-? WHERE id=?", (quantity, all_products[name]["id"]))
-        cursor = conn.execute("INSERT INTO orders (customer_name,email,phone,address,items,total,customer_id) VALUES (?,?,?,?,?,?,?)", (*customer.values(), total, session.get("customer_id")))
+        cursor = conn.execute(
+            "INSERT INTO orders (customer_name,email,phone,address,items,total,customer_id) VALUES (?,?,?,?,?,?,?)",
+            (
+                customer["customer_name"], customer["email"], customer["phone"],
+                customer["address"], customer["items"], total, session.get("customer_id")
+            ),
+        )
         order_id = cursor.lastrowid
         queue_notification(conn, customer["email"], "email", "Story Shop order received", f"Your order #{order_id} totals Rs. {total}.")
     return redirect(url_for("payment", kind="order", record_id=order_id))
@@ -219,8 +225,20 @@ def edit_profile():
     with db_connection() as conn:
 
         if request.method == "POST":
-            name = request.form.get("name")
-            email = request.form.get("email")
+            name = request.form.get("name", "").strip()
+            email = request.form.get("email", "").strip().lower()
+
+            if not name or not email:
+                flash("Name and email are required.", "error")
+                return redirect(url_for("edit_profile"))
+
+            duplicate = conn.execute(
+                "SELECT 1 FROM customers WHERE email=? AND id != ?",
+                (email, session["customer_id"]),
+            ).fetchone()
+            if duplicate:
+                flash("Another account already uses this email.", "error")
+                return redirect(url_for("edit_profile"))
 
             conn.execute(
                 """
@@ -268,6 +286,10 @@ def change_password():
 
             if not check_password_hash(customer["password_hash"], current_password):
                 flash("Current password is incorrect.", "error")
+                return redirect(url_for("change_password"))
+
+            if len(new_password or "") < 6:
+                flash("New password must contain at least 6 characters.", "error")
                 return redirect(url_for("change_password"))
 
             if new_password != confirm_password:
@@ -378,10 +400,45 @@ def login():
 
 @app.route("/admin")
 def admin():
-    if not session.get("admin"): return redirect(url_for("login"))
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+
     with db_connection() as conn:
-        bookings=conn.execute("SELECT * FROM bookings ORDER BY id DESC").fetchall(); orders=conn.execute("SELECT * FROM orders ORDER BY id DESC").fetchall(); products=conn.execute("SELECT * FROM products ORDER BY name").fetchall(); notifications=conn.execute("SELECT * FROM notifications ORDER BY id DESC LIMIT 20").fetchall()
-    return render_template("dashboard.html",bookings=bookings,orders=orders,products=products,notifications=notifications)
+
+        total_customers = conn.execute(
+            "SELECT COUNT(*) FROM customers"
+        ).fetchone()[0]
+
+        total_bookings = conn.execute(
+            "SELECT COUNT(*) FROM bookings"
+        ).fetchone()[0]
+
+        total_orders = conn.execute(
+            "SELECT COUNT(*) FROM orders"
+        ).fetchone()[0]
+
+        total_revenue = conn.execute(
+            "SELECT COALESCE(SUM(total),0) FROM orders"
+        ).fetchone()[0]
+
+        bookings = conn.execute("SELECT * FROM bookings ORDER BY id DESC").fetchall()
+        orders = conn.execute("SELECT * FROM orders ORDER BY id DESC").fetchall()
+        products = conn.execute("SELECT * FROM products ORDER BY name").fetchall()
+        notifications = conn.execute(
+            "SELECT * FROM notifications ORDER BY id DESC LIMIT 50"
+        ).fetchall()
+
+    return render_template(
+        "dashboard.html",
+        total_customers=total_customers,
+        total_bookings=total_bookings,
+        total_orders=total_orders,
+        total_revenue=total_revenue,
+        bookings=bookings,
+        orders=orders,
+        products=products,
+        notifications=notifications
+    )
 
 @app.route("/product/<product_id>/stock",methods=["POST"])
 def update_stock(product_id):
