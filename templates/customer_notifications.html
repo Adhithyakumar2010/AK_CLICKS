@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>Notifications</title>
+
+<link rel="stylesheet"
+href="{{ url_for('static', filename='css/style.css') }}">
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>My Notifications</h1>
+
+<br>
+
+{% if notifications %}
+
+<table border="1" width="100%" cellpadding="10">
+
+<tr>
+
+<th>Date</th>
+<th>Channel</th>
+<th>Subject</th>
+<th>Message</th>
+
+</tr>
+
+{% for notification in notifications %}
+
+<tr>
+
+<td>{{ notification.created_at }}</td>
+
+<td>{{ notification.channel }}</td>
+
+<td>{{ notification.subject }}</td>
+
+<td>{{ notification.body }}</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+{% else %}
+
+<h3>No notifications available.</h3>
+
+{% endif %}
+
+<br><br>
+
+<a href="{{ url_for('customer_home') }}"
+class="button">
+
+Back to Dashboard
+
+</a>
+
+</div>
+
+</body>
+
+</html>

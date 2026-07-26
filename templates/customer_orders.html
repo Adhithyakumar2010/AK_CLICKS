@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>My Orders | AK CLICKS</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>My Orders</h1>
+
+    <br>
+
+    {% if orders %}
+
+    <table border="1" cellpadding="10" cellspacing="0" width="100%">
+
+        <tr>
+            <th>Order ID</th>
+            <th>Books</th>
+            <th>Total</th>
+            <th>Status</th>
+            <th>Payment</th>
+            <th>Receipt</th>
+        </tr>
+
+        {% for order in orders %}
+
+        <tr>
+
+            <td>#{{ order.id }}</td>
+
+            <td>{{ order.items }}</td>
+
+            <td>₹{{ order.total }}</td>
+
+            <td>{{ order.status }}</td>
+
+            <td>{{ order.payment_status }}</td>
+
+            <td>
+
+                <a href="{{ url_for('receipt',
+                                    kind='order',
+                                    record_id=order.id) }}"
+                   class="button">
+
+                    Download PDF
+
+                </a>
+
+            </td>
+
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+    {% else %}
+
+    <h3>No orders found.</h3>
+
+    {% endif %}
+
+    <br><br>
+
+    <a href="{{ url_for('customer_home') }}"
+       class="button">
+
+        ← Back to Dashboard
+
+    </a>
+
+</div>
+
+</body>
+
+</html>

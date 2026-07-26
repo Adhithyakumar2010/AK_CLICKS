@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>My Bookings</title>
+
+<link rel="stylesheet"
+href="{{ url_for('static', filename='css/style.css') }}">
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>My Bookings</h1>
+
+{% if bookings %}
+
+<table border="1" width="100%" cellpadding="10">
+
+<tr>
+
+<th>ID</th>
+<th>Service</th>
+<th>Date</th>
+<th>Status</th>
+<th>Payment</th>
+<th>Receipt</th>
+
+</tr>
+
+{% for booking in bookings %}
+
+<tr>
+
+<td>#{{ booking.id }}</td>
+
+<td>{{ booking.service }}</td>
+
+<td>{{ booking.booking_date }}</td>
+
+<td>{{ booking.status }}</td>
+
+<td>{{ booking.payment_status }}</td>
+
+<td>
+
+<a
+href="{{ url_for('receipt',
+kind='booking',
+record_id=booking.id) }}"
+class="button">
+
+Download PDF
+
+</a>
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+{% else %}
+
+<h3>No bookings found.</h3>
+
+{% endif %}
+
+<br><br>
+
+<a href="{{ url_for('customer_home') }}"
+class="button">
+
+Back to Dashboard
+
+</a>
+
+</div>
+
+</body>
+
+</html>

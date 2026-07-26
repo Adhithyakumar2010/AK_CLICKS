@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Profile | AK CLICKS</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>My Profile</h1>
+
+    <hr>
+
+    <p><strong>Name:</strong> {{ customer.name }}</p>
+
+    <p><strong>Email:</strong> {{ customer.email }}</p>
+
+    <p><strong>Customer ID:</strong> {{ customer.id }}</p>
+
+    <p><strong>Joined:</strong> {{ customer.created_at }}</p>
+
+    <br>
+    <div class="profile-actions">
+
+    <a href="{{ url_for('edit_profile') }}" class="button">
+        Edit Profile
+    </a>
+
+    <a href="{{ url_for('change_password') }}" class="button">
+        Change Password
+    </a>
+
+    <a href="{{ url_for('customer_home') }}" class="button">
+        Back to Dashboard
+    </a>
+
+    </div>
+
+</div>
+
+</body>
+</html>

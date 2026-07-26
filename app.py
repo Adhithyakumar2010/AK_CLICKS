@@ -50,7 +50,14 @@ def init_db():
         for table in ("bookings", "orders"):
             add_column_if_missing(conn, table, "payment_status", "TEXT NOT NULL DEFAULT 'Unpaid'")
             add_column_if_missing(conn, table, "payment_method", "TEXT")
+
         add_column_if_missing(conn, "orders", "customer_id", "INTEGER")
+
+    # NEW
+        add_column_if_missing(conn, "customers", "phone", "TEXT")
+        add_column_if_missing(conn, "customers", "address", "TEXT")
+        add_column_if_missing(conn, "customers", "profile_image", "TEXT DEFAULT 'images/default-profile.png'")
+
         for item in PRODUCTS:
             conn.execute("INSERT OR IGNORE INTO products (id,name,category,price,image,description,stock) VALUES (:id,:name,:category,:price,:image,:description,10)", item)
 
@@ -186,6 +193,180 @@ def customer_home():
         customer=customer,
         orders=orders,
         bookings=bookings
+    )
+
+@app.route("/customer/profile")
+def customer_profile():
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+
+    with db_connection() as conn:
+        customer = conn.execute(
+            "SELECT * FROM customers WHERE id=?",
+            (session["customer_id"],)
+        ).fetchone()
+
+    return render_template(
+        "customer_profile.html",
+        customer=customer
+    )
+
+@app.route("/customer/profile/edit", methods=["GET", "POST"])
+def edit_profile():
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+
+    with db_connection() as conn:
+
+        if request.method == "POST":
+            name = request.form.get("name")
+            email = request.form.get("email")
+
+            conn.execute(
+                """
+                UPDATE customers
+                SET name=?, email=?
+                WHERE id=?
+                """,
+                (name, email, session["customer_id"])
+            )
+
+            session["customer_name"] = name
+
+            flash("Profile updated successfully.", "success")
+
+            return redirect(url_for("customer_profile"))
+
+        customer = conn.execute(
+            "SELECT * FROM customers WHERE id=?",
+            (session["customer_id"],)
+        ).fetchone()
+
+    return render_template(
+        "edit_profile.html",
+        customer=customer
+    )
+
+@app.route("/customer/change-password", methods=["GET", "POST"])
+def change_password():
+
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+
+    if request.method == "POST":
+
+        current_password = request.form.get("current_password")
+        new_password = request.form.get("new_password")
+        confirm_password = request.form.get("confirm_password")
+
+        with db_connection() as conn:
+
+            customer = conn.execute(
+                "SELECT * FROM customers WHERE id=?",
+                (session["customer_id"],)
+            ).fetchone()
+
+            if not check_password_hash(customer["password_hash"], current_password):
+                flash("Current password is incorrect.", "error")
+                return redirect(url_for("change_password"))
+
+            if new_password != confirm_password:
+                flash("Passwords do not match.", "error")
+                return redirect(url_for("change_password"))
+
+            conn.execute(
+                """
+                UPDATE customers
+                SET password_hash=?
+                WHERE id=?
+                """,
+                (
+                    generate_password_hash(new_password),
+                    session["customer_id"]
+                )
+            )
+
+        flash("Password changed successfully.", "success")
+
+        return redirect(url_for("customer_profile"))
+
+    return render_template("change_password.html")
+
+@app.route("/customer/orders")
+def customer_orders():
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+
+    with db_connection() as conn:
+        orders = conn.execute(
+            """
+            SELECT *
+            FROM orders
+            WHERE customer_id=?
+            ORDER BY id DESC
+            """,
+            (session["customer_id"],)
+        ).fetchall()
+
+    return render_template(
+        "customer_orders.html",
+        orders=orders
+    )
+
+@app.route("/customer/bookings")
+def customer_bookings():
+
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+
+    with db_connection() as conn:
+
+        customer = conn.execute(
+            "SELECT * FROM customers WHERE id=?",
+            (session["customer_id"],)
+        ).fetchone()
+
+        bookings = conn.execute(
+            """
+            SELECT *
+            FROM bookings
+            WHERE email=?
+            ORDER BY booking_date DESC
+            """,
+            (customer["email"],)
+        ).fetchall()
+
+    return render_template(
+        "customer_bookings.html",
+        bookings=bookings
+    )
+
+@app.route("/customer/notifications")
+def customer_notifications():
+
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+
+    with db_connection() as conn:
+
+        customer = conn.execute(
+            "SELECT * FROM customers WHERE id=?",
+            (session["customer_id"],)
+        ).fetchone()
+
+        notifications = conn.execute(
+            """
+            SELECT *
+            FROM notifications
+            WHERE recipient=?
+            ORDER BY id DESC
+            """,
+            (customer["email"],)
+        ).fetchall()
+
+    return render_template(
+        "customer_notifications.html",
+        notifications=notifications
     )
 
 @app.route("/login", methods=["GET","POST"])

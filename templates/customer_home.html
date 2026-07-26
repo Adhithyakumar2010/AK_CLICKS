@@ -1,120 +1,232 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Customer Dashboard | AK CLICKS</title>
 
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+
+        body{
+            background:#f7f4ee;
+            font-family:'DM Sans',sans-serif;
+            margin:0;
+        }
+
+        .dashboard{
+
+            max-width:1200px;
+            margin:60px auto;
+            padding:30px;
+
+        }
+
+        .welcome{
+
+            background:white;
+            padding:35px;
+            border-radius:12px;
+            box-shadow:0 10px 30px rgba(0,0,0,.08);
+            margin-bottom:35px;
+
+        }
+
+        .welcome h1{
+
+            margin:0;
+            font-size:50px;
+
+        }
+
+        .welcome p{
+
+            color:#666;
+            font-size:18px;
+
+        }
+
+        .cards{
+
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:30px;
+
+        }
+
+        .card{
+
+            background:white;
+            border-radius:12px;
+            padding:30px;
+            box-shadow:0 10px 25px rgba(0,0,0,.08);
+
+        }
+
+        .card h2{
+
+            margin-top:0;
+            border-bottom:2px solid #ddd;
+            padding-bottom:12px;
+
+        }
+
+        .item{
+
+            padding:15px 0;
+            border-bottom:1px solid #eee;
+
+        }
+
+        .status{
+
+            color:#a95d43;
+            font-weight:bold;
+
+        }
+
+        .buttons{
+
+            margin-top:40px;
+            display:flex;
+            justify-content:center;
+            gap:20px;
+
+        }
+
+        @media(max-width:900px){
+
+            .cards{
+
+                grid-template-columns:1fr;
+
+            }
+
+            .welcome h1{
+
+                font-size:38px;
+
+            }
+
+            .buttons{
+
+                flex-direction:column;
+
+            }
+
+        }
+
+    </style>
+
 </head>
 
 <body>
 
-<div class="confirmation-card">
+<div class="dashboard">
 
-    <h1>Welcome, {{ customer["name"] }}</h1>
+    <div class="welcome">
 
-    <p>Email : {{ customer["email"] }}</p>
+        <h1>Welcome, {{ customer["name"] }}</h1>
 
-    <hr>
+        <p>Email : {{ customer["email"] }}</p>
 
-    <h2>Your Bookings</h2>
+    </div>
 
-    {% if bookings %}
+    <div class="cards">
 
-        <table border="1" cellpadding="10">
+        <div class="card">
 
-            <tr>
-                <th>ID</th>
-                <th>Service</th>
-                <th>Date</th>
-                <th>Status</th>
-            </tr>
+            <h2>Your Bookings</h2>
 
-            {% for booking in bookings %}
+            {% if bookings %}
 
-            <tr>
+                {% for booking in bookings %}
 
-                <td>{{ booking["id"] }}</td>
+                    <div class="item">
 
-                <td>{{ booking["service"] }}</td>
+                        <strong>{{ booking["service"] }}</strong><br>
 
-                <td>{{ booking["booking_date"] }}</td>
+                        {{ booking["booking_date"] }}<br>
 
-                <td>{{ booking["status"] }}</td>
+                        <span class="status">{{ booking["status"] }}</span>
 
-            </tr>
+                    </div>
 
-            {% endfor %}
+                {% endfor %}
 
-        </table>
+            {% else %}
 
-    {% else %}
+                <p>No bookings found.</p>
 
-        <p>No bookings found.</p>
+            {% endif %}
 
-    {% endif %}
+        </div>
 
-    <br>
+        <div class="card">
 
-    <h2>Your Orders</h2>
+            <h2>Your Orders</h2>
 
-    {% if orders %}
+            {% if orders %}
 
-        <table border="1" cellpadding="10">
+                {% for order in orders %}
 
-            <tr>
+                    <div class="item">
 
-                <th>ID</th>
+                        <strong>{{ order["items"] }}</strong><br>
 
-                <th>Items</th>
+                        ₹{{ order["total"] }}<br>
 
-                <th>Total</th>
+                        <span class="status">{{ order["status"] }}</span>
 
-                <th>Status</th>
+                    </div>
 
-            </tr>
+                {% endfor %}
 
-            {% for order in orders %}
+            {% else %}
 
-            <tr>
+                <p>No orders found.</p>
 
-                <td>{{ order["id"] }}</td>
+            {% endif %}
 
-                <td>{{ order["items"] }}</td>
+        </div>
 
-                <td>₹{{ order["total"] }}</td>
+    </div>
 
-                <td>{{ order["status"] }}</td>
+    <div class="buttons">
 
-            </tr>
-
-            {% endfor %}
-
-        </table>
-
-    {% else %}
-
-        <p>No orders found.</p>
-
-    {% endif %}
-
-    <br>
+    <a href="{{ url_for('home') }}" class="button">
+        Home
+    </a>
 
     <a href="{{ url_for('shop') }}" class="button">
         Story Store
     </a>
 
-    <a href="{{ url_for('home') }}" class="button">
-        Home
+    <a href="{{ url_for('customer_orders') }}" class="button">
+        My Orders
+    </a>
+
+    <a href="{{ url_for('customer_bookings') }}" class="button">
+        My Bookings
+    </a>
+
+    <a href="{{ url_for('customer_profile') }}" class="button">
+        My Profile
+    </a>
+
+    <a href="{{ url_for('customer_notifications') }}" class="button">
+        Notifications
     </a>
 
     <a href="{{ url_for('customer_logout') }}" class="button">
         Logout
     </a>
 
+    </div>
+
 </div>
 
 </body>
+
 </html>
