@@ -118,6 +118,34 @@ img {
     background: rgba(255,255,255,.15);
 }
 
+.nav-account-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.site-header nav .nav-account-action {
+    border: 1px solid rgba(255,255,255,.75);
+    padding: 8px 12px;
+    color: #fff;
+    opacity: 1;
+    white-space: nowrap;
+}
+
+.site-header nav .nav-account-action:hover {
+    background: rgba(255,255,255,.15);
+}
+
+.site-header nav .nav-account-primary {
+    background: #fff;
+    border-color: #fff;
+    color: var(--ink);
+}
+
+.site-header nav .nav-account-primary:hover {
+    background: #ece5dc;
+}
+
 /* ========= Mobile Menu ========= */
 
 .menu-toggle {
@@ -131,6 +159,86 @@ img {
     font: inherit;
     cursor: pointer;
 }
+
+/* ========= Customer Authentication ========= */
+
+.auth-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 32px 18px;
+    background: linear-gradient(135deg, #211d19 0%, #5a4032 48%, #d5b7a2 100%);
+}
+
+.auth-card {
+    width: min(100%, 480px);
+    padding: clamp(30px, 7vw, 52px);
+    background: #fffdf9;
+    border-radius: 18px;
+    box-shadow: 0 24px 60px rgba(20, 15, 12, .28);
+}
+
+.auth-brand {
+    display: inline-block;
+    margin-bottom: 46px;
+    color: var(--ink);
+    font: 700 20px var(--serif);
+    letter-spacing: .12em;
+}
+
+.auth-brand span {
+    display: block;
+    font: 700 10px var(--sans);
+    letter-spacing: .20em;
+}
+
+.auth-card h1 {
+    margin: 10px 0 12px;
+    font: 600 clamp(34px, 8vw, 48px)/1.05 var(--serif);
+}
+
+.auth-intro {
+    margin: 0 0 26px;
+    color: var(--muted);
+    line-height: 1.6;
+}
+
+.auth-form {
+    display: grid;
+    gap: 18px;
+    text-align: left;
+}
+
+.auth-form input {
+    margin-top: 7px;
+    padding: 12px 14px;
+    border: 1px solid #cfc3b6;
+    border-radius: 9px;
+}
+
+.auth-form input:focus {
+    border-color: var(--clay);
+    box-shadow: 0 0 0 3px rgba(169, 93, 67, .12);
+}
+
+.auth-form .button {
+    justify-self: stretch;
+    margin-top: 8px;
+    text-align: center;
+}
+
+.auth-links {
+    display: grid;
+    gap: 14px;
+    margin-top: 27px;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.auth-links p { margin: 0; }
+.auth-links a { color: var(--ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.auth-links .auth-secondary-button { width: fit-content; padding: 10px 14px; border: 1px solid var(--ink); text-decoration: none; }
+.auth-links .auth-secondary-button:hover { background: #f0e8df; }
 
 /* ========= Hero ========= */
 
@@ -1420,6 +1528,14 @@ tr:hover {
     .site-header nav.open {
         display: flex;
     }
+
+    .nav-account-actions {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .auth-page { padding: 18px; }
+    .auth-card { border-radius: 14px; }
 
     /* ---------- Hero ---------- */
 

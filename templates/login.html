@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Login | AK CLICKS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="auth-page">
+  <main class="auth-card">
+    <a class="auth-brand" href="{{ url_for('home') }}">AK <span>CLICKS</span></a>
+    <p class="eyebrow">Customer account</p><h1>Welcome back.</h1><p class="auth-intro">Sign in to follow your bookings, orders, payments, and notifications.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<p class="form-message {{ category }}">{{ message }}</p>{% endfor %}{% endwith %}
+    <form method="post" action="{{ url_for('account') }}" class="auth-form">
+      <input type="hidden" name="action" value="login">
+      <label>Email address<input type="email" name="email" autocomplete="email" required></label>
+      <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+      <button class="button" type="submit">Login <span>&rarr;</span></button>
+    </form>
+    <div class="auth-links"><a class="auth-secondary-button" href="{{ url_for('home') }}">&larr; Back to Home</a><p>Don't have an account? <a href="{{ url_for('customer_signup') }}">Sign Up</a></p></div>
+  </main>
+</body>
+</html>

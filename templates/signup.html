@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sign Up | AK CLICKS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="auth-page">
+  <main class="auth-card">
+    <a class="auth-brand" href="{{ url_for('home') }}">AK <span>CLICKS</span></a>
+    <p class="eyebrow">Customer account</p><h1>Start your story.</h1><p class="auth-intro">Create an account to manage every AK CLICKS booking and purchase in one place.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<p class="form-message {{ category }}">{{ message }}</p>{% endfor %}{% endwith %}
+    <form method="post" action="{{ url_for('account') }}" class="auth-form">
+      <input type="hidden" name="action" value="register">
+      <label>Full name<input name="name" autocomplete="name" required></label>
+      <label>Email address<input type="email" name="email" autocomplete="email" required></label>
+      <label>Phone number<input type="tel" name="phone" autocomplete="tel" required></label>
+      <label>Password<input type="password" name="password" autocomplete="new-password" minlength="6" required></label>
+      <label>Confirm password<input type="password" name="confirm_password" autocomplete="new-password" minlength="6" required></label>
+      <button class="button" type="submit">Create Account <span>&rarr;</span></button>
+    </form>
+    <div class="auth-links"><a class="auth-secondary-button" href="{{ url_for('customer_login') }}">&larr; Back to Login</a><p>Already have an account? <a href="{{ url_for('customer_login') }}">Login</a></p></div>
+  </main>
+</body>
+</html>

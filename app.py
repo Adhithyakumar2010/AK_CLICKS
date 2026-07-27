@@ -2,7 +2,7 @@ import io
 import os
 import sqlite3
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime
 from urllib.parse import urlencode
 
 import qrcode
@@ -18,6 +18,12 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-before-production")
 BOOKING_DEPOSIT = int(os.environ.get("BOOKING_DEPOSIT", "2000"))
 UPI_ID = os.environ.get("UPI_ID", "your-upi-id@bank")
+FAVICON_VERSION = "20260727"
+BOOKING_PACKAGES = {
+    "Essential": 5000,
+    "Signature": 10000,
+    "Premium": 18000,
+}
 
 PRODUCTS = [
     {"id": "armor-of-light", "name": "The Armor of Light", "category": "Historical novel", "price": 299, "image": "images/story-store/trick-treat1-img.jpeg", "description": "A sweeping historical story from Ken Follett."},
@@ -32,6 +38,24 @@ def db_connection():
     conn = sqlite3.connect("bookings.db")
     conn.row_factory = sqlite3.Row
     return conn
+
+def favicon_head_markup():
+    """Return one cache-busted favicon set for every HTML page."""
+    icon_url = url_for("static", filename="images/favicon.ico", v=FAVICON_VERSION)
+    png_url = url_for("static", filename="images/favicon.png", v=FAVICON_VERSION)
+    return (
+        f'<link rel="icon" href="{icon_url}" sizes="any" type="image/x-icon">'
+        f'<link rel="icon" href="{png_url}" sizes="32x32" type="image/png">'
+    )
+
+@app.after_request
+def add_favicon_to_html_pages(response):
+    """Keep favicon markup identical across every independently-rendered template."""
+    if response.mimetype == "text/html":
+        page = response.get_data(as_text=True)
+        if "</head>" in page and "images/favicon.ico" not in page:
+            response.set_data(page.replace("</head>", favicon_head_markup() + "</head>", 1))
+    return response
 
 def add_column_if_missing(conn, table, column, definition):
     if column not in {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}:
@@ -57,6 +81,7 @@ def init_db():
         add_column_if_missing(conn, "customers", "phone", "TEXT")
         add_column_if_missing(conn, "customers", "address", "TEXT")
         add_column_if_missing(conn, "customers", "profile_image", "TEXT DEFAULT 'images/default-profile.png'")
+        add_column_if_missing(conn, "notifications", "is_read", "INTEGER NOT NULL DEFAULT 0")
 
         for item in PRODUCTS:
             conn.execute("INSERT OR IGNORE INTO products (id,name,category,price,image,description,stock) VALUES (:id,:name,:category,:price,:image,:description,10)", item)
@@ -71,28 +96,156 @@ def payment_record(kind, record_id):
     with db_connection() as conn:
         record = conn.execute(f"SELECT * FROM {table} WHERE id=?", (record_id,)).fetchone()
     if record is None: abort(404)
-    return table, record, BOOKING_DEPOSIT if kind == "booking" else record["total"]
+    if kind == "booking":
+        package = record["service"].rsplit(" — ", 1)[-1]
+        return table, record, BOOKING_PACKAGES.get(package, BOOKING_DEPOSIT)
+    return table, record, record["total"]
+
+def pending_booking():
+    data = session.get("pending_booking")
+    required = {"name", "email", "phone", "service", "package", "location"}
+    return data if isinstance(data, dict) and required.issubset(data) else None
 
 @app.route("/")
 def home(): return render_template("index.html", products=catalog_products(), year=datetime.now().year)
+
+@app.route("/favicon.ico")
+def favicon():
+    return redirect(url_for("static", filename="images/favicon.ico", v=FAVICON_VERSION))
 
 @app.route("/availability")
 def availability():
     date = request.args.get("date", "")
     with db_connection() as conn:
-        count = conn.execute("SELECT COUNT(*) FROM bookings WHERE booking_date=? AND status != 'Declined'", (date,)).fetchone()[0]
-    return jsonify({"date": date, "available": count == 0, "message": "Available to enquire" if count == 0 else "This date already has a booking enquiry."})
+        statuses = [row["status"] for row in conn.execute("SELECT status FROM bookings WHERE booking_date=? AND status != 'Declined'", (date,)).fetchall()]
+    available = not statuses
+    return jsonify({"date": date, "available": available, "statuses": statuses, "message": "Available to book" if available else "This date is currently unavailable."})
+
+@app.route("/booking-calendar")
+def booking_calendar():
+    if not pending_booking():
+        flash("Complete your booking details before selecting a date.", "error")
+        return redirect(url_for("home") + "#booking")
+    return render_template("booking_calendar.html", year=datetime.now().year)
+
+@app.route("/api/booking-calendar")
+def booking_calendar_data():
+    month = request.args.get("month", "")
+    try:
+        start = datetime.strptime(month, "%Y-%m").date()
+    except ValueError:
+        return jsonify({"error": "Use a valid month in YYYY-MM format."}), 400
+
+    if start.month == 12:
+        end = start.replace(year=start.year + 1, month=1)
+    else:
+        end = start.replace(month=start.month + 1)
+
+    with db_connection() as conn:
+        rows = conn.execute(
+            "SELECT booking_date, status FROM bookings WHERE booking_date >= ? AND booking_date < ? AND status != 'Declined'",
+            (start.isoformat(), end.isoformat()),
+        ).fetchall()
+
+    # Only date and status are exposed: visitors never see another customer's details.
+    events = [{"date": row["booking_date"], "status": row["status"]} for row in rows]
+    return jsonify({"month": month, "events": events})
 
 @app.route("/book", methods=["POST"])
 def book():
-    fields = {key: request.form.get(key, "").strip() for key in ("name","email","phone","service","booking_date","location","message")}
-    if not all(fields[key] for key in ("name","email","phone","service","booking_date")):
-        flash("Please complete all required booking details.", "error"); return redirect(url_for("home") + "#booking")
+    fields = {key: request.form.get(key, "").strip() for key in ("name", "email", "phone", "service", "package", "location", "message")}
+    if not all(fields[key] for key in ("name", "email", "phone", "service", "package", "location")):
+        flash("Please complete all required booking details.", "error")
+        return redirect(url_for("home") + "#booking")
+    if fields["package"] not in BOOKING_PACKAGES:
+        flash("Please choose a valid photography package.", "error")
+        return redirect(url_for("home") + "#booking")
+    fields["email"] = fields["email"].lower()
+    session["pending_booking"] = fields
+    session.modified = True
+    return redirect(url_for("booking_calendar"))
+
+@app.route("/booking/select-date", methods=["POST"])
+def select_booking_date():
+    details = pending_booking()
+    if not details:
+        flash("Your booking details have expired. Please start again.", "error")
+        return redirect(url_for("home") + "#booking")
+    selected_date = request.form.get("booking_date", "").strip()
+    try:
+        event_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
+    except ValueError:
+        flash("Please choose a valid event date.", "error")
+        return redirect(url_for("booking_calendar"))
+    if event_date < date.today():
+        flash("Please choose a future event date.", "error")
+        return redirect(url_for("booking_calendar"))
     with db_connection() as conn:
-        cursor = conn.execute("INSERT INTO bookings (name,email,phone,service,booking_date,location,message) VALUES (:name,:email,:phone,:service,:booking_date,:location,:message)", fields)
+        unavailable = conn.execute(
+            "SELECT 1 FROM bookings WHERE booking_date=? AND status != 'Declined' LIMIT 1",
+            (selected_date,),
+        ).fetchone()
+        if unavailable:
+            flash("That date has just become unavailable. Please select another date.", "error")
+            return redirect(url_for("booking_calendar"))
+    details["booking_date"] = selected_date
+    session["pending_booking"] = details
+    session.modified = True
+    return redirect(url_for("pending_booking_payment"))
+
+@app.route("/booking/payment")
+def pending_booking_payment():
+    details = pending_booking()
+    if not details or not details.get("booking_date"):
+        flash("Choose an available date before continuing to payment.", "error")
+        return redirect(url_for("booking_calendar"))
+    return render_template(
+        "booking_payment.html",
+        booking=details,
+        amount=BOOKING_PACKAGES[details["package"]],
+        upi_id=UPI_ID,
+    )
+
+@app.route("/booking/payment/qr")
+def pending_booking_payment_qr():
+    details = pending_booking()
+    if not details or not details.get("booking_date"):
+        abort(404)
+    amount = BOOKING_PACKAGES[details["package"]]
+    payload = "upi://pay?" + urlencode({"pa": UPI_ID, "pn": "AK CLICKS", "am": amount, "cu": "INR", "tn": "AK-PENDING-BOOKING"})
+    image = qrcode.make(payload, image_factory=qrcode.image.svg.SvgPathImage, box_size=8, border=2)
+    output = io.BytesIO(); image.save(output)
+    return Response(output.getvalue(), mimetype="image/svg+xml")
+
+@app.route("/booking/payment/confirm", methods=["POST"])
+def confirm_pending_booking_payment():
+    details = pending_booking()
+    method = request.form.get("method")
+    if not details or not details.get("booking_date"):
+        flash("Your booking session has expired. Please start again.", "error")
+        return redirect(url_for("home") + "#booking")
+    if method not in {"upi", "netbanking", "card"}:
+        flash("Choose a payment method.", "error")
+        return redirect(url_for("pending_booking_payment"))
+    with db_connection() as conn:
+        unavailable = conn.execute(
+            "SELECT 1 FROM bookings WHERE booking_date=? AND status != 'Declined' LIMIT 1",
+            (details["booking_date"],),
+        ).fetchone()
+        if unavailable:
+            flash("That date is no longer available. Please choose another date.", "error")
+            return redirect(url_for("booking_calendar"))
+        service = f"{details['service']} — {details['package']}"
+        message = f"Package: {details['package']}\n{details['message']}".strip()
+        cursor = conn.execute(
+            "INSERT INTO bookings (name,email,phone,service,booking_date,location,message,payment_status,payment_method) VALUES (?,?,?,?,?,?,?,?,?)",
+            (details["name"], details["email"], details["phone"], service, details["booking_date"], details["location"], message, "Payment submitted (test)", method),
+        )
         booking_id = cursor.lastrowid
-        queue_notification(conn, fields["email"], "email", "Booking enquiry received", f"Your {fields['service']} enquiry is recorded. Booking reference: {booking_id}.")
-    return redirect(url_for("payment", kind="booking", record_id=booking_id))
+        queue_notification(conn, details["email"], "email", "Booking enquiry received", f"Your {service} enquiry is recorded. Booking reference: {booking_id}.")
+        queue_notification(conn, details["email"], "whatsapp", "Payment submitted", f"Payment submission received for booking #{booking_id}. This is test mode.")
+    session.pop("pending_booking", None)
+    return render_template("confirmation.html", kind="booking", record_id=booking_id, paid=True, year=datetime.now().year)
 
 @app.route("/shop")
 def shop(): return render_template("shop.html", products=catalog_products(), year=datetime.now().year)
@@ -152,23 +305,56 @@ def receipt(kind, record_id):
 
 @app.route("/account", methods=["GET","POST"])
 def account():
-    if request.method == "POST":
-        action = request.form.get("action"); email = request.form.get("email", "").strip().lower(); password = request.form.get("password", "")
-        with db_connection() as conn:
-            if action == "register":
-                name = request.form.get("name", "").strip()
-                if not name or not email or len(password) < 6: flash("Use a name, valid email and at least 6-character password.", "error")
-                elif conn.execute("SELECT 1 FROM customers WHERE email=?", (email,)).fetchone(): flash("An account already uses this email.", "error")
-                else:
-                    cursor=conn.execute("INSERT INTO customers (name,email,password_hash) VALUES (?,?,?)",(name,email,generate_password_hash(password))); session["customer_id"]=cursor.lastrowid; session["customer_name"]=name; return redirect(url_for("customer_home"))
-            else:
-                customer=conn.execute("SELECT * FROM customers WHERE email=?",(email,)).fetchone()
-                if customer and check_password_hash(customer["password_hash"], password): session["customer_id"]=customer["id"];session["customer_name"]=customer["name"];return redirect(url_for("customer_home"))
-                flash("Invalid email or password.", "error")
-    orders=[]
     if session.get("customer_id"):
-        with db_connection() as conn: orders=conn.execute("SELECT * FROM orders WHERE customer_id=? ORDER BY id DESC",(session["customer_id"],)).fetchall()
-    return render_template("account.html", orders=orders)
+        return redirect(url_for("customer_home"))
+    if request.method == "GET":
+        return redirect(url_for("customer_login"))
+
+    action = request.form.get("action")
+    email = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")
+    destination = "customer_signup" if action == "register" else "customer_login"
+    with db_connection() as conn:
+        if action == "register":
+            name = request.form.get("name", "").strip()
+            phone = request.form.get("phone", "").strip()
+            confirm_password = request.form.get("confirm_password", "")
+            if not name or not email or not phone or len(password) < 6:
+                flash("Complete every field and use a password with at least 6 characters.", "error")
+            elif password != confirm_password:
+                flash("Password and confirmation do not match.", "error")
+            elif conn.execute("SELECT 1 FROM customers WHERE email=?", (email,)).fetchone():
+                flash("An account already uses this email.", "error")
+            else:
+                cursor = conn.execute(
+                    "INSERT INTO customers (name,email,phone,password_hash) VALUES (?,?,?,?)",
+                    (name, email, phone, generate_password_hash(password)),
+                )
+                session["customer_id"] = cursor.lastrowid
+                session["customer_name"] = name
+                return redirect(url_for("customer_home"))
+        elif action == "login":
+            customer = conn.execute("SELECT * FROM customers WHERE email=?", (email,)).fetchone()
+            if customer and check_password_hash(customer["password_hash"], password):
+                session["customer_id"] = customer["id"]
+                session["customer_name"] = customer["name"]
+                return redirect(url_for("customer_home"))
+            flash("Invalid email or password.", "error")
+        else:
+            flash("Please use the login or sign-up form.", "error")
+    return redirect(url_for(destination))
+
+@app.route("/account/login")
+def customer_login():
+    if session.get("customer_id"):
+        return redirect(url_for("customer_home"))
+    return render_template("login.html")
+
+@app.route("/account/signup")
+def customer_signup():
+    if session.get("customer_id"):
+        return redirect(url_for("customer_home"))
+    return render_template("signup.html")
 
 @app.route("/account/logout")
 def customer_logout(): session.pop("customer_id",None);session.pop("customer_name",None);return redirect(url_for("home"))
@@ -194,11 +380,17 @@ def customer_home():
             (customer["email"],)
         ).fetchall()
 
+        unread_notifications = conn.execute(
+            "SELECT COUNT(*) FROM notifications WHERE recipient=? AND is_read=0",
+            (customer["email"],)
+        ).fetchone()[0]
+
     return render_template(
         "customer_home.html",
         customer=customer,
         orders=orders,
-        bookings=bookings
+        bookings=bookings,
+        unread_notifications=unread_notifications
     )
 
 @app.route("/customer/profile")
@@ -388,8 +580,45 @@ def customer_notifications():
 
     return render_template(
         "customer_notifications.html",
-        notifications=notifications
+        notifications=notifications,
+        unread_count=sum(1 for notification in notifications if not notification["is_read"])
     )
+
+@app.route("/customer/notifications/<int:notification_id>/read", methods=["POST"])
+def update_customer_notification(notification_id):
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+    action = request.form.get("action")
+    if action not in {"read", "unread"}:
+        return redirect(url_for("customer_notifications"))
+    with db_connection() as conn:
+        customer = conn.execute("SELECT email FROM customers WHERE id=?", (session["customer_id"],)).fetchone()
+        if customer:
+            conn.execute(
+                "UPDATE notifications SET is_read=? WHERE id=? AND recipient=?",
+                (1 if action == "read" else 0, notification_id, customer["email"]),
+            )
+    return redirect(url_for("customer_notifications"))
+
+@app.route("/customer/notifications/<int:notification_id>/delete", methods=["POST"])
+def delete_customer_notification(notification_id):
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+    with db_connection() as conn:
+        customer = conn.execute("SELECT email FROM customers WHERE id=?", (session["customer_id"],)).fetchone()
+        if customer:
+            conn.execute("DELETE FROM notifications WHERE id=? AND recipient=?", (notification_id, customer["email"]))
+    return redirect(url_for("customer_notifications"))
+
+@app.route("/customer/notifications/read-all", methods=["POST"])
+def read_all_customer_notifications():
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+    with db_connection() as conn:
+        customer = conn.execute("SELECT email FROM customers WHERE id=?", (session["customer_id"],)).fetchone()
+        if customer:
+            conn.execute("UPDATE notifications SET is_read=1 WHERE recipient=?", (customer["email"],))
+    return redirect(url_for("customer_notifications"))
 
 @app.route("/login", methods=["GET","POST"])
 def login():
@@ -428,6 +657,16 @@ def admin():
             "SELECT * FROM notifications ORDER BY id DESC LIMIT 50"
         ).fetchall()
 
+    calendar_events = [
+        {
+            "id": booking["id"], "date": booking["booking_date"], "status": booking["status"],
+            "name": booking["name"], "email": booking["email"], "phone": booking["phone"],
+            "service": booking["service"], "location": booking["location"] or "TBC",
+            "payment_status": booking["payment_status"],
+        }
+        for booking in bookings
+    ]
+
     return render_template(
         "dashboard.html",
         total_customers=total_customers,
@@ -435,6 +674,7 @@ def admin():
         total_orders=total_orders,
         total_revenue=total_revenue,
         bookings=bookings,
+        calendar_events=calendar_events,
         orders=orders,
         products=products,
         notifications=notifications
@@ -451,8 +691,45 @@ def update_stock(product_id):
 @app.route("/booking/<int:booking_id>/status",methods=["POST"])
 def update_booking(booking_id):
     if not session.get("admin"): return redirect(url_for("login"))
-    if request.form.get("status") in {"Pending","Approved","Declined"}:
-        with db_connection() as conn: conn.execute("UPDATE bookings SET status=? WHERE id=?",(request.form["status"],booking_id))
+    status = request.form.get("status")
+    if status in {"Pending", "Approved", "Declined", "Completed"}:
+        with db_connection() as conn:
+            booking = conn.execute("SELECT email, service FROM bookings WHERE id=?", (booking_id,)).fetchone()
+            conn.execute("UPDATE bookings SET status=? WHERE id=?", (status, booking_id))
+            if booking:
+                queue_notification(conn, booking["email"], "email", "Booking status updated", f"Your {booking['service']} booking #{booking_id} is now {status}.")
+    return redirect(url_for("admin"))
+
+@app.route("/booking/<int:booking_id>/edit", methods=["POST"])
+def edit_booking(booking_id):
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+    fields = {key: request.form.get(key, "").strip() for key in ("name", "email", "phone", "service", "booking_date", "location", "payment_status")}
+    if not all(fields[key] for key in ("name", "email", "phone", "service", "booking_date")):
+        flash("Booking details require a name, email, phone, service, and date.", "error")
+        return redirect(url_for("admin"))
+    try:
+        datetime.strptime(fields["booking_date"], "%Y-%m-%d")
+    except ValueError:
+        flash("Please enter a valid event date.", "error")
+        return redirect(url_for("admin"))
+    with db_connection() as conn:
+        booking = conn.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
+        if booking is None:
+            abort(404)
+        conflict = conn.execute(
+            "SELECT 1 FROM bookings WHERE booking_date=? AND id!=? AND status != 'Declined' LIMIT 1",
+            (fields["booking_date"], booking_id),
+        ).fetchone()
+        if conflict:
+            flash("Another active booking already uses that date.", "error")
+            return redirect(url_for("admin"))
+        conn.execute(
+            "UPDATE bookings SET name=?, email=?, phone=?, service=?, booking_date=?, location=?, payment_status=? WHERE id=?",
+            (fields["name"], fields["email"].lower(), fields["phone"], fields["service"], fields["booking_date"], fields["location"], fields["payment_status"], booking_id),
+        )
+        queue_notification(conn, fields["email"].lower(), "email", "Booking details updated", f"Your {fields['service']} booking #{booking_id} was updated by AK CLICKS.")
+    flash("Booking details updated.", "success")
     return redirect(url_for("admin"))
 
 @app.route("/order/<int:order_id>/status",methods=["POST"])

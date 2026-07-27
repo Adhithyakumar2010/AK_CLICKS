@@ -105,6 +105,25 @@
 
 </div>
 
+<!-- ================= Booking Calendar ================= -->
+
+<div class="section" id="booking-calendar">
+    <div class="admin-calendar-header"><div><h2>Booking Calendar</h2><p>See the status of every photography booking at a glance.</p></div><div class="admin-calendar-actions"><button type="button" id="admin-calendar-previous" aria-label="Previous month">&larr;</button><strong id="admin-calendar-title"></strong><button type="button" id="admin-calendar-next" aria-label="Next month">&rarr;</button></div></div>
+    <div class="admin-calendar-weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+    <div class="admin-calendar-grid" id="admin-calendar-grid"></div>
+    <div class="admin-calendar-legend"><span><i class="admin-dot approved"></i>Approved</span><span><i class="admin-dot pending"></i>Pending</span><span><i class="admin-dot completed"></i>Completed</span><span><i class="admin-dot declined"></i>Declined</span></div>
+</div>
+
+<div class="booking-modal" id="booking-details-modal" hidden role="dialog" aria-modal="true" aria-labelledby="booking-modal-title">
+    <div class="booking-modal-backdrop" data-close-modal></div>
+    <section class="booking-modal-card">
+        <button type="button" class="booking-modal-close" data-close-modal aria-label="Close booking details">&times;</button>
+        <p class="modal-eyebrow">Admin booking details</p>
+        <h2 id="booking-modal-title">Bookings</h2>
+        <div id="booking-modal-content"></div>
+    </section>
+</div>
+
 <!-- ================= Bookings ================= -->
 
 <div class="section" id="bookings">
@@ -185,7 +204,7 @@ method="post">
 <select name="status"
 onchange="this.form.submit()">
 
-{% for status in ['Pending','Approved','Declined'] %}
+{% for status in ['Pending','Approved','Completed','Declined'] %}
 
 <option
 
@@ -468,6 +487,79 @@ No Notifications
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
+const bookingCalendarEvents = {{ calendar_events|tojson }};
+(function () {
+    const grid = document.getElementById("admin-calendar-grid");
+    if (!grid) return;
+    const title = document.getElementById("admin-calendar-title");
+    let shown = new Date();
+    shown = new Date(shown.getFullYear(), shown.getMonth(), 1);
+    const dateKey = (value) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+    const render = () => {
+        title.textContent = shown.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+        const eventsByDate = {};
+        bookingCalendarEvents.forEach((event) => { (eventsByDate[event.date] ||= []).push(event); });
+        grid.innerHTML = "";
+        for (let empty = 0; empty < shown.getDay(); empty += 1) grid.insertAdjacentHTML("beforeend", '<div class="admin-calendar-empty"></div>');
+        const days = new Date(shown.getFullYear(), shown.getMonth() + 1, 0).getDate();
+        for (let day = 1; day <= days; day += 1) {
+            const current = new Date(shown.getFullYear(), shown.getMonth(), day);
+            const dateEvents = eventsByDate[dateKey(current)] || [];
+            const statuses = dateEvents.map((event) => event.status);
+            const status = statuses.includes("Approved") ? "approved" : statuses.includes("Pending") ? "pending" : statuses.includes("Completed") ? "completed" : statuses.includes("Declined") ? "declined" : "";
+            const item = document.createElement("button"); item.type = "button"; item.className = `admin-calendar-day ${status}`;
+            item.innerHTML = `<strong>${day}</strong>${statuses.length ? `<small>${statuses.join(", ")}</small>` : ""}`;
+            item.addEventListener("click", () => showBookingDetails(current, dateEvents));
+            grid.appendChild(item);
+        }
+    };
+    document.getElementById("admin-calendar-previous").addEventListener("click", () => { shown.setMonth(shown.getMonth() - 1); render(); });
+    document.getElementById("admin-calendar-next").addEventListener("click", () => { shown.setMonth(shown.getMonth() + 1); render(); });
+
+    const modal = document.getElementById("booking-details-modal");
+    const modalTitle = document.getElementById("booking-modal-title");
+    const modalContent = document.getElementById("booking-modal-content");
+    const closeModal = () => { modal.hidden = true; };
+    document.querySelectorAll("[data-close-modal]").forEach((button) => button.addEventListener("click", closeModal));
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !modal.hidden) closeModal(); });
+    function showBookingDetails(current, dateEvents) {
+        modalTitle.textContent = current.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+        modalContent.innerHTML = "";
+        if (!dateEvents.length) {
+            const empty = document.createElement("p"); empty.className = "modal-empty"; empty.textContent = "No bookings exist for this date."; modalContent.appendChild(empty);
+        }
+        dateEvents.forEach((booking) => {
+            const card = document.createElement("article"); card.className = "booking-detail-card";
+            const fields = [["Customer", booking.name], ["Email", booking.email], ["Phone", booking.phone], ["Service", booking.service], ["Event date", booking.date], ["Location", booking.location], ["Payment", booking.payment_status], ["Booking status", booking.status]];
+            fields.forEach(([label, value]) => { const row = document.createElement("p"); const strong = document.createElement("strong"); strong.textContent = `${label}: `; row.append(strong, value || "—"); card.appendChild(row); });
+            const actions = document.createElement("div"); actions.className = "booking-modal-actions";
+            [["Approved", "Approve"], ["Declined", "Decline"], ["Completed", "Mark completed"]].forEach(([status, label]) => {
+                const form = document.createElement("form"); form.method = "post"; form.action = `/booking/${booking.id}/status`;
+                const input = document.createElement("input"); input.type = "hidden"; input.name = "status"; input.value = status;
+                const button = document.createElement("button"); button.type = "submit"; button.className = `modal-action ${status.toLowerCase()}`; button.textContent = label; button.disabled = booking.status === status;
+                form.append(input, button); actions.appendChild(form);
+            });
+            card.appendChild(actions);
+            const editor = document.createElement("details"); editor.className = "booking-editor";
+            const summary = document.createElement("summary"); summary.textContent = "Edit booking details"; editor.appendChild(summary);
+            const editForm = document.createElement("form"); editForm.method = "post"; editForm.action = `/booking/${booking.id}/edit`; editForm.className = "booking-edit-form";
+            const inputField = (labelText, name, value, type = "text") => {
+                const label = document.createElement("label"); label.textContent = labelText;
+                const input = document.createElement("input"); input.type = type; input.name = name; input.value = value || ""; input.required = name !== "location";
+                label.appendChild(input); return label;
+            };
+            editForm.append(inputField("Customer name", "name", booking.name), inputField("Email", "email", booking.email, "email"), inputField("Phone", "phone", booking.phone), inputField("Event date", "booking_date", booking.date, "date"), inputField("Location", "location", booking.location));
+            const serviceLabel = document.createElement("label"); serviceLabel.textContent = "Service"; const service = document.createElement("select"); service.name = "service";
+            ["Wedding Photography", "Birthday Photography", "Event Photography", "Portrait Session", "Brand Content"].forEach((optionName) => { const option = document.createElement("option"); option.value = optionName; option.textContent = optionName; option.selected = optionName === booking.service; service.appendChild(option); }); serviceLabel.appendChild(service); editForm.appendChild(serviceLabel);
+            const paymentLabel = document.createElement("label"); paymentLabel.textContent = "Payment status"; const payment = document.createElement("select"); payment.name = "payment_status";
+            ["Unpaid", "Payment submitted (test)", "Paid"].forEach((optionName) => { const option = document.createElement("option"); option.value = optionName; option.textContent = optionName; option.selected = optionName === booking.payment_status; payment.appendChild(option); }); paymentLabel.appendChild(payment); editForm.appendChild(paymentLabel);
+            const save = document.createElement("button"); save.type = "submit"; save.className = "modal-action save"; save.textContent = "Save booking changes"; editForm.appendChild(save); editor.appendChild(editForm);
+            card.appendChild(editor); modalContent.appendChild(card);
+        });
+        modal.hidden = false;
+    }
+    render();
+})();
 window.onload = function () {
 
     if (!window.Chart) {
@@ -512,16 +604,18 @@ window.onload = function () {
         new Chart(bookingCanvas, {
             type: "doughnut",
             data: {
-                labels: ["Pending", "Approved", "Declined"],
+                labels: ["Pending", "Approved", "Completed", "Declined"],
                 datasets: [{
                     data: [
                         {{ bookings|selectattr('status','equalto','Pending')|list|length }},
                         {{ bookings|selectattr('status','equalto','Approved')|list|length }},
+                        {{ bookings|selectattr('status','equalto','Completed')|list|length }},
                         {{ bookings|selectattr('status','equalto','Declined')|list|length }}
                     ],
                     backgroundColor: [
                         "#FF9800",
                         "#4CAF50",
+                        "#2196F3",
                         "#F44336"
                     ]
                 }]

@@ -3,7 +3,11 @@ const navigation = document.querySelector('.site-header nav');
 if (menuButton && navigation) menuButton.addEventListener('click', () => navigation.classList.toggle('open'));
 
 const bookingDate = document.querySelector('input[name="booking_date"]');
-if (bookingDate) bookingDate.min = new Date().toISOString().split('T')[0];
+if (bookingDate) {
+  bookingDate.min = new Date().toISOString().split('T')[0];
+  const selectedDate = new URLSearchParams(window.location.search).get('date');
+  if (selectedDate) bookingDate.value = selectedDate;
+}
 
 const products = JSON.parse(document.getElementById('products-data')?.textContent || '[]');
 let cart = JSON.parse(localStorage.getItem('akClicksCart') || '[]');
