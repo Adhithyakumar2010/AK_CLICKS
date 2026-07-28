@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment | AK STORY STORE</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/story-store.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/story-payment.css') }}">
+</head>
+<body class="story-store-body">
+
+    <header class="header">
+        <div class="container nav">
+            <a class="nav__logo" href="{{ url_for('story_home') }}">AK <span>STORY STORE</span></a>
+            <ul class="nav__list">
+                <li><a href="{{ url_for('story_home') }}" class="nav__link">Home</a></li>
+                <li><a href="{{ url_for('story_books') }}" class="nav__link">Books</a></li>
+                <li><a href="{{ url_for('story_cart') }}" class="nav__cart">🛒 Cart ({{ cart_count|default(0) }})</a></li>
+            </ul>
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-container">
+        {% for category, message in messages %}
+        <div class="flash-msg {{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <main class="main section container payment-wrapper">
+        <div style="margin-bottom: 2rem;">
+            <a href="{{ url_for('story_checkout') }}" class="continue-shopping-link">&larr; Return to Checkout</a>
+        </div>
+
+        <h1 class="section__title">Complete Your Payment</h1>
+
+        <div class="payment-grid">
+            <!-- Left Column: Info & Summary -->
+            <div>
+                <!-- Customer Info -->
+                <div class="payment-card">
+                    <div class="payment-card__header">
+                        <h2 class="payment-card__title">1. Customer Information</h2>
+                    </div>
+                    <div class="customer-info-grid">
+                        <div class="info-item">
+                            <label>Customer Name</label>
+                            <p>{{ order.customer_name }}</p>
+                        </div>
+                        <div class="info-item">
+                            <label>Email Address</label>
+                            <p>{{ order.email }}</p>
+                        </div>
+                        <div class="info-item">
+                            <label>Phone Number</label>
+                            <p>{{ order.phone }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Delivery Address -->
+                <div class="payment-card">
+                    <div class="payment-card__header">
+                        <h2 class="payment-card__title">2. Delivery Address</h2>
+                    </div>
+                    <div class="address-info-grid">
+                        <div class="info-item" style="grid-column: span 2;">
+                            <label>Shipping Address</label>
+                            <p>{{ order.address }}</p>
+                        </div>
+                        <div class="info-item">
+                            <label>City & State</label>
+                            <p>Coimbatore, Tamil Nadu</p>
+                        </div>
+                        <div class="info-item">
+                            <label>Estimated Delivery</label>
+                            <p style="color:#2ecc71;">5 - 7 Business Days</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Order Summary Breakdown -->
+                <div class="payment-card">
+                    <div class="payment-card__header">
+                        <h2 class="payment-card__title">3. Order Summary</h2>
+                    </div>
+                    <div>
+                        {% for item in cart_items %}
+                        <div class="summary-item-row">
+                            <img src="{{ url_for('static', filename=item.image) }}" alt="{{ item.name }}" class="summary-item-cover">
+                            <div class="summary-item-details">
+                                <div class="summary-item-title">{{ item.name }}</div>
+                                <div class="summary-item-author">{{ item.category }}</div>
+                                <div class="summary-item-qty">Qty: {{ item.quantity }} &times; ₹{{ item.price }}</div>
+                            </div>
+                            <div class="summary-item-price">₹{{ item.subtotal }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="summary-math">
+                        <div class="summary-math-row">
+                            <span>Subtotal</span>
+                            <span>₹{{ amount }}</span>
+                        </div>
+                        <div class="summary-math-row">
+                            <span>Shipping Charge</span>
+                            <span style="color:#2ecc71; font-weight:var(--font-bold);">FREE</span>
+                        </div>
+                        <div class="summary-math-row">
+                            <span>Discount</span>
+                            <span style="color:#2ecc71;">- ₹0</span>
+                        </div>
+                        <div class="summary-math-row grand-total">
+                            <span>Grand Total</span>
+                            <span style="color:var(--first-color);">₹{{ amount }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: 6 Selectable Payment Methods Cards -->
+            <div>
+                <div class="payment-card">
+                    <div class="payment-card__header">
+                        <h2 class="payment-card__title">Select Payment Method</h2>
+                    </div>
+
+                    <!-- Payment Status Card -->
+                    <div class="status-card" id="statusCard">
+                        <span class="status-badge" id="statusBadge">Pending</span>
+                        <span id="statusMessage">Awaiting Payment Authorization</span>
+                    </div>
+
+                    <!-- 6 Payment Method Selectable Card Tabs -->
+                    <div class="payment-methods-tabs">
+                        <div class="payment-tab active" data-method="razorpay">Razorpay</div>
+                        <div class="payment-tab" data-method="upi">UPI / QR</div>
+                        <div class="payment-tab" data-method="credit">Credit Card</div>
+                        <div class="payment-tab" data-method="debit">Debit Card</div>
+                        <div class="payment-tab" data-method="netbanking">Net Banking</div>
+                        <div class="payment-tab" data-method="cod">Cash On Delivery</div>
+                    </div>
+
+                    <form action="{{ url_for('story_order_success') }}" method="post" id="storyPaymentForm">
+                        <input type="hidden" name="method" id="selectedPaymentMethod" value="Razorpay">
+
+                        <!-- TAB 1: Razorpay -->
+                        <div class="payment-panel-content active" id="panel-razorpay">
+                            <div style="background:rgba(0,0,0,0.3); border:1px solid var(--card-border); border-radius:.75rem; padding:1.5rem; text-align:center; margin-bottom:1.5rem;">
+                                <div style="font-weight:var(--font-black); font-size:1.4rem; color:var(--title-color); margin-bottom:.5rem;">
+                                    ⚡ <span style="color:#0744a6;">Razorpay</span> Gateway
+                                </div>
+                                <p style="color:var(--text-color-light); font-size:var(--small-font-size); margin-bottom:1rem;">Fast & Secure Payment processing via Official Razorpay Gateway.</p>
+                                <span style="background:rgba(255, 72, 32, 0.2); color:var(--first-color); padding:.3rem .8rem; border-radius:1rem; font-size:var(--smaller-font-size); font-weight:var(--font-bold);">Test Mode Gateway Active</span>
+                            </div>
+                            <button type="submit" class="button" style="width:100%; font-size:1.1rem; padding:1rem;">Proceed with Razorpay &middot; ₹{{ amount }} &rarr;</button>
+                        </div>
+
+                        <!-- TAB 2: UPI / QR -->
+                        <div class="payment-panel-content" id="panel-upi">
+                            <div style="background:rgba(0,0,0,0.3); border:1px solid var(--card-border); border-radius:.75rem; padding:1.5rem; text-align:center; margin-bottom:1.5rem;">
+                                <img src="{{ url_for('story_payment_qr') }}" alt="UPI QR Code" style="width:180px; height:180px; border-radius:.5rem; margin:0 auto 1rem; border:6px solid #ffffff; display:block;">
+                                <p style="color:var(--title-color); font-weight:var(--font-bold); margin-bottom:.25rem;">Scan QR with any UPI App</p>
+                                <div style="display:flex; justify-content:center; align-items:center; gap:.5rem; margin-bottom:1rem;">
+                                    <span style="font-size:var(--small-font-size); color:var(--text-color-light);">UPI ID: <strong style="color:var(--title-color);" id="upiIdText">payments@akclicks</strong></span>
+                                    <button type="button" onclick="navigator.clipboard.writeText('payments@akclicks'); alert('UPI ID copied to clipboard!');" class="button button--ghost" style="padding:.2rem .6rem; font-size:.75rem;">Copy</button>
+                                </div>
+                                <div style="display:flex; justify-content:center; gap:1rem; flex-wrap:wrap; font-size:var(--smaller-font-size); color:var(--text-color-light);">
+                                    <span>Google Pay</span> &bull; <span>PhonePe</span> &bull; <span>Paytm</span> &bull; <span>BHIM</span>
+                                </div>
+                            </div>
+                            <button type="submit" class="button" style="width:100%; font-size:1.1rem; padding:1rem;">Confirm UPI Payment &middot; ₹{{ amount }} &rarr;</button>
+                        </div>
+
+                        <!-- TAB 3: Credit Card -->
+                        <div class="payment-panel-content" id="panel-credit">
+                            <div style="background:rgba(0,0,0,0.3); border:1px solid var(--card-border); border-radius:.75rem; padding:1.5rem; margin-bottom:1.5rem;">
+                                <h3 style="font-size:var(--h3-font-size); margin-bottom:1rem; color:var(--title-color);">Credit Card Details</h3>
+                                <div style="display:flex; gap:.5rem; margin-bottom:1rem; font-size:var(--smaller-font-size); color:var(--text-color-light);">
+                                    <span>💳 Visa</span> &bull; <span>Mastercard</span> &bull; <span>RuPay</span> &bull; <span>Amex</span>
+                                </div>
+                                <div class="checkout-form">
+                                    <label>Card Holder Name
+                                        <input type="text" id="cc_name" placeholder="Name on Credit Card">
+                                    </label>
+                                    <label>Card Number
+                                        <input type="text" id="cc_number" placeholder="0000 0000 0000 0000" maxlength="19">
+                                    </label>
+                                    <div class="form-group-row">
+                                        <label>Expiry Date
+                                            <input type="text" id="cc_exp" placeholder="MM / YY" maxlength="5">
+                                        </label>
+                                        <label>CVV
+                                            <input type="password" id="cc_cvv" placeholder="123" maxlength="4">
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="submit" onclick="return validateCardForm('cc');" class="button" style="width:100%; font-size:1.1rem; padding:1rem;">Pay ₹{{ amount }} via Credit Card &rarr;</button>
+                        </div>
+
+                        <!-- TAB 4: Debit Card -->
+                        <div class="payment-panel-content" id="panel-debit">
+                            <div style="background:rgba(0,0,0,0.3); border:1px solid var(--card-border); border-radius:.75rem; padding:1.5rem; margin-bottom:1.5rem;">
+                                <h3 style="font-size:var(--h3-font-size); margin-bottom:1rem; color:var(--title-color);">Debit Card Payment</h3>
+                                <div style="display:flex; gap:.5rem; margin-bottom:1rem; font-size:var(--smaller-font-size); color:var(--text-color-light);">
+                                    <span>💳 Visa</span> &bull; <span>Mastercard</span> &bull; <span>RuPay Debit</span>
+                                </div>
+                                <div class="checkout-form">
+                                    <label>Card Holder Name
+                                        <input type="text" id="dc_name" placeholder="Name on Debit Card">
+                                    </label>
+                                    <label>Card Number
+                                        <input type="text" id="dc_number" placeholder="0000 0000 0000 0000" maxlength="19">
+                                    </label>
+                                    <div class="form-group-row">
+                                        <label>Expiry Date
+                                            <input type="text" id="dc_exp" placeholder="MM / YY" maxlength="5">
+                                        </label>
+                                        <label>CVV
+                                            <input type="password" id="dc_cvv" placeholder="123" maxlength="4">
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="submit" onclick="return validateCardForm('dc');" class="button" style="width:100%; font-size:1.1rem; padding:1rem;">Pay ₹{{ amount }} via Debit Card &rarr;</button>
+                        </div>
+
+                        <!-- TAB 5: Net Banking -->
+                        <div class="payment-panel-content" id="panel-netbanking">
+                            <div style="background:rgba(0,0,0,0.3); border:1px solid var(--card-border); border-radius:.75rem; padding:1.5rem; margin-bottom:1.5rem;">
+                                <h3 style="font-size:var(--h3-font-size); margin-bottom:1rem; color:var(--title-color);">Select Your Bank</h3>
+                                <div class="checkout-form">
+                                    <label>Popular Indian Banks
+                                        <select name="bank_name" style="background:#0a0b09; color:#fff; border:1px solid var(--card-border); padding:.85rem; border-radius:.5rem;">
+                                            <option value="State Bank of India">State Bank of India (SBI)</option>
+                                            <option value="HDFC Bank">HDFC Bank</option>
+                                            <option value="ICICI Bank">ICICI Bank</option>
+                                            <option value="Axis Bank">Axis Bank</option>
+                                            <option value="Canara Bank">Canara Bank</option>
+                                            <option value="Indian Bank">Indian Bank</option>
+                                            <option value="Punjab National Bank">Punjab National Bank (PNB)</option>
+                                            <option value="Bank of Baroda">Bank of Baroda</option>
+                                            <option value="Union Bank of India">Union Bank of India</option>
+                                            <option value="Federal Bank">Federal Bank</option>
+                                            <option value="Kotak Mahindra Bank">Kotak Mahindra Bank</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="submit" class="button" style="width:100%; font-size:1.1rem; padding:1rem;">Proceed to Bank &middot; ₹{{ amount }} &rarr;</button>
+                        </div>
+
+                        <!-- TAB 6: Cash On Delivery -->
+                        <div class="payment-panel-content" id="panel-cod">
+                            <div style="background:rgba(0,0,0,0.3); border:1px solid var(--card-border); border-radius:.75rem; padding:1.5rem; text-align:center; margin-bottom:1.5rem;">
+                                <div style="font-size:3rem; margin-bottom:.5rem;">💵</div>
+                                <h3 style="font-size:var(--h3-font-size); color:var(--title-color); margin-bottom:.5rem;">Cash on Delivery</h3>
+                                <p style="color:var(--text-color); font-size:var(--normal-font-size); margin-bottom:.5rem;">Cash will be collected during delivery. No online payment required.</p>
+                                <span style="color:#2ecc71; font-weight:var(--font-semi-bold); font-size:var(--small-font-size);">Estimated Delivery: 5 - 7 Business Days</span>
+                            </div>
+                            <button type="submit" class="button" style="width:100%; font-size:1.1rem; padding:1rem;">Confirm Cash on Delivery Order &rarr;</button>
+                        </div>
+                    </form>
+
+                    <!-- Security Badges Section -->
+                    <div class="secure-badges">
+                        <div class="badge-item"><span>🔒</span> 100% Secure Payment</div>
+                        <div class="badge-item"><span>🛡️</span> SSL Encrypted</div>
+                        <div class="badge-item"><span>💳</span> Verified Gateway</div>
+                        <div class="badge-item"><span>📜</span> PCI DSS Compliant</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <span class="footer__copy">&#169; 2026 AK Story Store. All rights reserved.</span>
+    </footer>
+
+    <script>
+        // Tab Switcher
+        document.querySelectorAll('.payment-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.payment-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.payment-panel-content').forEach(p => p.classList.remove('active'));
+
+                this.classList.add('active');
+                const method = this.getAttribute('data-method');
+                document.getElementById('selectedPaymentMethod').value = method;
+
+                const targetPanel = document.getElementById('panel-' + method);
+                if (targetPanel) {
+                    targetPanel.classList.add('active');
+                }
+
+                // Update Status Card
+                const statusBadge = document.getElementById('statusBadge');
+                const statusMsg = document.getElementById('statusMessage');
+                if (method === 'cod') {
+                    statusBadge.textContent = 'Pending COD';
+                    statusBadge.style.background = '#3498db';
+                    statusBadge.style.color = '#fff';
+                    statusMsg.textContent = 'Payment due upon physical delivery';
+                } else {
+                    statusBadge.textContent = 'Pending';
+                    statusBadge.style.background = '#ffc107';
+                    statusBadge.style.color = '#000';
+                    statusMsg.textContent = 'Awaiting Payment Authorization';
+                }
+            });
+        });
+
+        // Form Validation for Credit/Debit Cards
+        function validateCardForm(prefix) {
+            const name = document.getElementById(prefix + '_name').value.trim();
+            const number = document.getElementById(prefix + '_number').value.replace(/\s+/g, '');
+            const exp = document.getElementById(prefix + '_exp').value.trim();
+            const cvv = document.getElementById(prefix + '_cvv').value.trim();
+
+            if (!name) {
+                alert('Please enter Card Holder Name.');
+                return false;
+            }
+            if (!number || number.length < 13 || isNaN(number)) {
+                alert('Please enter a valid Card Number (13-19 digits).');
+                return false;
+            }
+            if (!exp || !exp.includes('/')) {
+                alert('Please enter Expiry Date in MM/YY format.');
+                return false;
+            }
+            if (!cvv || cvv.length < 3 || isNaN(cvv)) {
+                alert('Please enter a valid 3 or 4-digit CVV.');
+                return false;
+            }
+            return true;
+        }
+    </script>
+</body>
+</html>

@@ -16,6 +16,9 @@
       <input type="hidden" name="action" value="login">
       <label>Email address<input type="email" name="email" autocomplete="email" required></label>
       <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+      <div style="text-align: right; margin-top: -6px; margin-bottom: 4px; font-size: 14px;">
+        <a href="{{ url_for('forgot_password') }}" style="color: var(--muted); text-decoration: underline;">Forgot Password?</a>
+      </div>
       <button class="button" type="submit">Login <span>&rarr;</span></button>
     </form>
     <div class="auth-links"><a class="auth-secondary-button" href="{{ url_for('home') }}">&larr; Back to Home</a><p>Don't have an account? <a href="{{ url_for('customer_signup') }}">Sign Up</a></p></div>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AK STORY STORE | Modern Bookstore</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/story-store.css') }}">
+</head>
+<body class="story-store-body">
+
+    <!-- Header Navigation -->
+    <header class="header">
+        <div class="container nav">
+            <a class="nav__logo" href="{{ url_for('story_home') }}">
+                AK <span>STORY STORE</span>
+            </a>
+            <ul class="nav__list">
+                <li><a href="{{ url_for('story_home') }}" class="nav__link active">Home</a></li>
+                <li><a href="{{ url_for('story_categories') }}" class="nav__link">Categories</a></li>
+                <li><a href="{{ url_for('story_books') }}" class="nav__link">Books</a></li>
+                <li><a href="{{ url_for('home') }}" class="nav__link">Main Website</a></li>
+                <li>
+                    <a href="{{ url_for('story_cart') }}" class="nav__cart">
+                        🛒 Cart ({{ cart_count|default(0) }})
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-container">
+        {% for category, message in messages %}
+        <div class="flash-msg {{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <main class="main">
+        <!-- Hero Banner -->
+        <section class="section home__container container">
+            <div class="home__content">
+                <div>
+                    <span class="home__subtitle">Curated Stories & Editions</span>
+                    <h1 class="home__title">Stories That Stay With You Forever</h1>
+                    <p class="home__description">Explore curated photo books, graphic novels, timeless classics, and hardbound art editions in the AK Story Store.</p>
+                    <div class="home__buttons">
+                        <a href="{{ url_for('story_books') }}" class="button button--flex">Browse Collection &rarr;</a>
+                        <a href="{{ url_for('story_categories') }}" class="button button--ghost">Explore Categories</a>
+                    </div>
+                </div>
+                <img src="{{ url_for('static', filename='images/story-store/about-img.png') }}" alt="AK Story Store" class="home__img">
+            </div>
+        </section>
+
+        <!-- Featured Books Section -->
+        <section class="section container">
+            <h2 class="section__title">Featured Books</h2>
+            <div class="books__container grid">
+                {% for book in books[:4] %}
+                <article class="book-card">
+                    <span class="book-card__tag">{{ book.category }}</span>
+                    <img src="{{ url_for('static', filename=book.image) }}" alt="{{ book.name }}" class="book-card__img">
+                    <h3 class="book-card__title">{{ book.name }}</h3>
+                    <p class="book-card__author">{{ book.description[:60] }}...</p>
+                    <div class="book-card__footer">
+                        <span class="book-card__price">₹{{ book.price }}</span>
+                        <a href="{{ url_for('story_book_details', book_id=book.id) }}" class="button" style="padding:.5rem 1rem; font-size:.85rem;">View Book</a>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Popular Categories Section -->
+        <section class="section container">
+            <h2 class="section__title">Popular Categories</h2>
+            <div class="category__container grid">
+                <a href="{{ url_for('story_categories') }}" class="category-card">
+                    <img src="{{ url_for('static', filename='images/story-store/category1-img.jpg') }}" alt="Fiction" class="category-card__img">
+                    <h3 class="category-card__title">Fiction & Novels</h3>
+                    <p style="color:var(--text-color-light); font-size:var(--small-font-size);">Immersive storytelling & classics</p>
+                </a>
+                <a href="{{ url_for('story_categories') }}" class="category-card">
+                    <img src="{{ url_for('static', filename='images/story-store/category2-img.jpg') }}" alt="Graphic Novels" class="category-card__img">
+                    <h3 class="category-card__title">Graphic Novels</h3>
+                    <p style="color:var(--text-color-light); font-size:var(--small-font-size);">Illustrated adventures & comics</p>
+                </a>
+                <a href="{{ url_for('story_categories') }}" class="category-card">
+                    <img src="{{ url_for('static', filename='images/story-store/category3-img.jpg') }}" alt="Art & Photography" class="category-card__img">
+                    <h3 class="category-card__title">Art & Photography</h3>
+                    <p style="color:var(--text-color-light); font-size:var(--small-font-size);">Heirloom albums & visual stories</p>
+                </a>
+            </div>
+        </section>
+
+        <!-- Best Sellers Section -->
+        <section class="section container">
+            <h2 class="section__title">Best Sellers</h2>
+            <div class="books__container grid">
+                {% for book in books[4:] %}
+                <article class="book-card">
+                    <span class="book-card__tag">{{ book.category }}</span>
+                    <img src="{{ url_for('static', filename=book.image) }}" alt="{{ book.name }}" class="book-card__img">
+                    <h3 class="book-card__title">{{ book.name }}</h3>
+                    <p class="book-card__author">{{ book.description[:60] }}...</p>
+                    <div class="book-card__footer">
+                        <span class="book-card__price">₹{{ book.price }}</span>
+                        <a href="{{ url_for('story_book_details', book_id=book.id) }}" class="button" style="padding:.5rem 1rem; font-size:.85rem;">View Book</a>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container grid footer__container">
+            <div>
+                <a class="footer__logo" href="{{ url_for('story_home') }}">AK <span>STORY STORE</span></a>
+                <p class="footer__description">A dedicated bookstore for readers, collectors, and photography enthusiasts.</p>
+            </div>
+            <div>
+                <h3 class="footer__title">Navigation</h3>
+                <div class="footer__links">
+                    <a href="{{ url_for('story_home') }}" class="footer__link">Home</a>
+                    <a href="{{ url_for('story_categories') }}" class="footer__link">Categories</a>
+                    <a href="{{ url_for('story_books') }}" class="footer__link">All Books</a>
+                </div>
+            </div>
+            <div>
+                <h3 class="footer__title">Quick Links</h3>
+                <div class="footer__links">
+                    <a href="{{ url_for('story_cart') }}" class="footer__link">Shopping Cart</a>
+                    <a href="{{ url_for('home') }}" class="footer__link">Main Website</a>
+                </div>
+            </div>
+        </div>
+        <span class="footer__copy">&#169; 2026 AK Story Store. All rights reserved.</span>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/story-store.js') }}"></script>
+</body>
+</html>

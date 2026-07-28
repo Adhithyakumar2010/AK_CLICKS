@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ book.name }} | AK STORY STORE</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/story-store.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/story-book.css') }}">
+</head>
+<body class="story-store-body">
+
+    <header class="header">
+        <div class="container nav">
+            <a class="nav__logo" href="{{ url_for('story_home') }}">AK <span>STORY STORE</span></a>
+            <ul class="nav__list">
+                <li><a href="{{ url_for('story_home') }}" class="nav__link">Home</a></li>
+                <li><a href="{{ url_for('story_categories') }}" class="nav__link">Categories</a></li>
+                <li><a href="{{ url_for('story_books') }}" class="nav__link">Books</a></li>
+                <li><a href="{{ url_for('home') }}" class="nav__link">Main Website</a></li>
+                <li><a href="{{ url_for('story_cart') }}" class="nav__cart">🛒 Cart ({{ cart_count|default(0) }})</a></li>
+            </ul>
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-container">
+        {% for category, message in messages %}
+        <div class="flash-msg {{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <main class="main section container">
+        <div style="margin-bottom: 2rem;">
+            <a href="{{ url_for('story_books') }}" class="continue-shopping-link">&larr; Continue Shopping (All Books)</a>
+        </div>
+
+        <div class="book-details-container">
+            <div class="book-media">
+                <img src="{{ url_for('static', filename=book.image) }}" alt="{{ book.name }}">
+            </div>
+
+            <div class="book-info">
+                <span class="book-card__tag">{{ book.category }}</span>
+                <h1>{{ book.name }}</h1>
+                <p class="book-author">Category: {{ book.category }} &middot; Stock: {{ book.stock|default(10) }} Available</p>
+                <div class="book-price-tag">₹{{ book.price }}</div>
+
+                <p class="book-description">
+                    {{ book.description }}
+                </p>
+
+                <form action="{{ url_for('story_cart_add') }}" method="post" class="book-actions-form">
+                    <input type="hidden" name="book_id" value="{{ book.id }}">
+                    <div class="qty-control-group">
+                        <button type="button" class="qty-btn" onclick="const input = this.parentNode.querySelector('input'); input.value = Math.max(1, parseInt(input.value) - 1);">-</button>
+                        <input type="number" name="quantity" value="1" min="1" class="qty-input" readonly>
+                        <button type="button" class="qty-btn" onclick="const input = this.parentNode.querySelector('input'); input.value = parseInt(input.value) + 1;">+</button>
+                    </div>
+                    <button type="submit" class="button">Add to Cart &rarr;</button>
+                    <a href="{{ url_for('story_books') }}" class="button button--ghost">Explore More</a>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <span class="footer__copy">&#169; 2026 AK Story Store. All rights reserved.</span>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/story-store.js') }}"></script>
+</body>
+</html>

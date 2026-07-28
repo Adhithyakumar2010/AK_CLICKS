@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Booking #{{ booking.id }} | AK CLICKS Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <style>
+        .edit-card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,.08);
+            max-width: 650px;
+            margin: 0 auto;
+        }
+        .edit-form {
+            display: grid;
+            gap: 18px;
+            margin-top: 20px;
+        }
+        .edit-form label {
+            display: grid;
+            gap: 6px;
+            font-weight: 700;
+            font-size: 14px;
+            color: #333;
+        }
+        .edit-form input, .edit-form select {
+            padding: 10px 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+            width: 100%;
+        }
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 10px;
+        }
+        .btn-cancel {
+            background: #6c665f;
+            color: white;
+            padding: 10px 18px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 700;
+        }
+        .btn-cancel:hover {
+            background: #524d47;
+        }
+        .btn-save {
+            background: #a95d43;
+            color: white;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .btn-save:hover {
+            background: #884933;
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="logo">AK CLICKS</div>
+    <ul>
+        <li><a href="{{ url_for('admin') }}">🏠 Dashboard</a></li>
+        <li><a href="{{ url_for('admin') }}#bookings">📅 Bookings</a></li>
+        <li><a href="{{ url_for('admin') }}#orders">🛒 Orders</a></li>
+        <li><a href="{{ url_for('admin') }}#products">📚 Products</a></li>
+        <li><a href="{{ url_for('home') }}">🌐 Website</a></li>
+        <li><a href="{{ url_for('logout') }}">🚪 Logout</a></li>
+    </ul>
+</div>
+
+<div class="main">
+    <div class="topbar">
+        <div>
+            <h1>Edit Booking #{{ booking.id }}</h1>
+            <p>Update photography booking enquiry details</p>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div style="margin-bottom:20px; padding:12px 18px; border-radius:6px; background:{% if category=='error' %}#ffe0df{% else %}#dff3e5{% endif %}; color:{% if category=='error' %}#8d2b28{% else %}#176733{% endif %}; font-weight:bold;">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endwith %}
+
+    <div class="edit-card">
+        <h2>Booking Details</h2>
+        <form method="post" action="{{ url_for('admin_edit_booking', booking_id=booking.id) }}" class="edit-form">
+            <label>Booking ID (Read-only)
+                <input type="text" value="#{{ booking.id }}" disabled style="background:#f0f0f0;">
+            </label>
+            <label>Customer Name
+                <input type="text" name="name" value="{{ booking.name }}" required>
+            </label>
+            <label>Email Address
+                <input type="email" name="email" value="{{ booking.email }}" required>
+            </label>
+            <label>Phone Number
+                <input type="tel" name="phone" value="{{ booking.phone }}" required>
+            </label>
+            <label>Service
+                <input type="text" name="service" value="{{ booking.service }}" required>
+            </label>
+            <label>Booking Date
+                <input type="date" name="booking_date" value="{{ booking.booking_date }}" required>
+            </label>
+            <label>Location
+                <input type="text" name="location" value="{{ booking.location or '' }}">
+            </label>
+            <label>Booking Status
+                <select name="status" required>
+                    {% for st in ['Pending', 'Approved', 'Completed', 'Declined'] %}
+                        <option value="{{ st }}" {% if booking.status == st %}selected{% endif %}>{{ st }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="btn-save">💾 Save Changes</button>
+                <a href="{{ url_for('admin') }}#bookings" class="btn-cancel">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,13 +1,15 @@
 import io
 import os
+import secrets
 import sqlite3
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
 
 import qrcode
 import qrcode.image.svg
-from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask_mail import Mail, Message
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
@@ -16,6 +18,31 @@ from werkzeug.security import check_password_hash, generate_password_hash
 app = Flask(__name__)
 
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-before-production")
+app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
+app.config["MAIL_PORT"] = int(os.environ.get("MAIL_PORT", 587))
+app.config["MAIL_USE_TLS"] = os.environ.get("MAIL_USE_TLS", "true").lower() in ("true", "1", "on")
+app.config["MAIL_USE_SSL"] = os.environ.get("MAIL_USE_SSL", "false").lower() in ("true", "1", "on")
+app.config["MAIL_USERNAME"] = os.environ.get("MAIL_USERNAME")
+app.config["MAIL_PASSWORD"] = os.environ.get("MAIL_PASSWORD")
+app.config["MAIL_DEFAULT_SENDER"] = os.environ.get("MAIL_DEFAULT_SENDER") or os.environ.get("MAIL_USERNAME") or "noreply@akclicks.com"
+
+mail = Mail(app)
+
+def send_email_with_logs(recipient, subject, body):
+    print(f"Customer Email: {recipient}", flush=True)
+    print("Connecting to SMTP...", flush=True)
+    try:
+        sender = app.config.get("MAIL_DEFAULT_SENDER") or "noreply@akclicks.com"
+        msg = Message(subject=subject, recipients=[recipient], body=body, sender=sender)
+        mail.send(msg)
+        print("Email Sent Successfully", flush=True)
+        return True, None
+    except Exception as e:
+        print(f"SMTP Error: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return False, str(e)
+
 BOOKING_DEPOSIT = int(os.environ.get("BOOKING_DEPOSIT", "2000"))
 UPI_ID = os.environ.get("UPI_ID", "your-upi-id@bank")
 FAVICON_VERSION = "20260727"
@@ -81,6 +108,10 @@ def init_db():
         add_column_if_missing(conn, "customers", "phone", "TEXT")
         add_column_if_missing(conn, "customers", "address", "TEXT")
         add_column_if_missing(conn, "customers", "profile_image", "TEXT DEFAULT 'images/default-profile.png'")
+        add_column_if_missing(conn, "customers", "is_verified", "INTEGER DEFAULT 1")
+        add_column_if_missing(conn, "customers", "verification_token", "TEXT")
+        add_column_if_missing(conn, "customers", "reset_token", "TEXT")
+        add_column_if_missing(conn, "customers", "reset_token_expiry", "DATETIME")
         add_column_if_missing(conn, "notifications", "is_read", "INTEGER NOT NULL DEFAULT 0")
 
         for item in PRODUCTS:
@@ -326,12 +357,14 @@ def account():
             elif conn.execute("SELECT 1 FROM customers WHERE email=?", (email,)).fetchone():
                 flash("An account already uses this email.", "error")
             else:
+                verification_token = secrets.token_urlsafe(32)
                 cursor = conn.execute(
-                    "INSERT INTO customers (name,email,phone,password_hash) VALUES (?,?,?,?)",
-                    (name, email, phone, generate_password_hash(password)),
+                    "INSERT INTO customers (name,email,phone,password_hash,is_verified,verification_token) VALUES (?,?,?,?,?,?)",
+                    (name, email, phone, generate_password_hash(password), 1, verification_token),
                 )
                 session["customer_id"] = cursor.lastrowid
                 session["customer_name"] = name
+                flash("Account created successfully! Welcome to AK CLICKS.", "success")
                 return redirect(url_for("customer_home"))
         elif action == "login":
             customer = conn.execute("SELECT * FROM customers WHERE email=?", (email,)).fetchone()
@@ -359,6 +392,87 @@ def customer_signup():
 @app.route("/account/logout")
 def customer_logout(): session.pop("customer_id",None);session.pop("customer_name",None);return redirect(url_for("home"))
 
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        with db_connection() as conn:
+            customer = conn.execute("SELECT * FROM customers WHERE email=?", (email,)).fetchone()
+            if customer:
+                reset_token = secrets.token_urlsafe(32)
+                expiry = (datetime.now() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+                conn.execute(
+                    "UPDATE customers SET reset_token=?, reset_token_expiry=? WHERE id=?",
+                    (reset_token, expiry, customer["id"]),
+                )
+                print("Reset Token Generated", flush=True)
+                reset_url = url_for("reset_password", token=reset_token, _external=True)
+                subject = "AK CLICKS Password Reset"
+                body = f"Hello {customer['name']},\n\nWe received a request to reset your password.\n\nClick the secure link below to reset your password.\n\n{reset_url}\n\nThis link expires in 30 minutes.\n\nIf you didn't request this, simply ignore this email.\n\nRegards,\nAK CLICKS"
+                queue_notification(conn, email, "email", subject, body)
+                success, error_msg = send_email_with_logs(email, subject, body)
+                if success:
+                    flash("Password reset email sent successfully.", "success")
+                else:
+                    flash(f"Failed to send password reset email. SMTP Error: {error_msg}", "error")
+            else:
+                flash("If an account with that email exists, password reset instructions have been sent.", "info")
+        return redirect(url_for("forgot_password"))
+    return render_template("forgot_password.html")
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    with db_connection() as conn:
+        customer = conn.execute("SELECT * FROM customers WHERE reset_token=?", (token,)).fetchone()
+        if not customer or not customer["reset_token_expiry"]:
+            flash("Invalid or expired reset link.", "error")
+            return redirect(url_for("forgot_password"))
+
+        try:
+            expiry = datetime.strptime(customer["reset_token_expiry"], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            flash("Invalid or expired reset link.", "error")
+            return redirect(url_for("forgot_password"))
+
+        if datetime.now() > expiry:
+            flash("This reset token has expired. Please request a new one.", "error")
+            return redirect(url_for("forgot_password"))
+
+        if request.method == "POST":
+            new_password = request.form.get("new_password", "")
+            confirm_password = request.form.get("confirm_password", "")
+
+            if len(new_password) < 8:
+                flash("Password must be at least 8 characters long.", "error")
+                return render_template("reset_password.html", token=token)
+
+            if new_password != confirm_password:
+                flash("Passwords do not match.", "error")
+                return render_template("reset_password.html", token=token)
+
+            conn.execute(
+                "UPDATE customers SET password_hash=?, reset_token=NULL, reset_token_expiry=NULL WHERE id=?",
+                (generate_password_hash(new_password), customer["id"]),
+            )
+            flash("Password updated successfully. Please log in with your new password.", "success")
+            return redirect(url_for("customer_login"))
+
+    return render_template("reset_password.html", token=token)
+
+@app.route("/verify-email/<token>")
+def verify_email(token):
+    with db_connection() as conn:
+        customer = conn.execute("SELECT * FROM customers WHERE verification_token=?", (token,)).fetchone()
+        if not customer:
+            flash("Invalid or expired verification token.", "error")
+            return redirect(url_for("customer_login"))
+
+        conn.execute(
+            "UPDATE customers SET is_verified=1, verification_token=NULL WHERE id=?",
+            (customer["id"],),
+        )
+    return render_template("verify_email_success.html")
+
 @app.route("/customer")
 def customer_home():
     if not session.get("customer_id"):
@@ -380,6 +494,19 @@ def customer_home():
             (customer["email"],)
         ).fetchall()
 
+        upcoming_booking = conn.execute(
+            """
+            SELECT *
+            FROM bookings
+            WHERE email = ?
+                AND status = 'Approved'
+                AND booking_date >= ?
+            ORDER BY booking_date ASC
+            LIMIT 1
+            """,
+            (customer["email"], date.today().isoformat())
+        ).fetchone()        
+
         unread_notifications = conn.execute(
             "SELECT COUNT(*) FROM notifications WHERE recipient=? AND is_read=0",
             (customer["email"],)
@@ -390,7 +517,8 @@ def customer_home():
         customer=customer,
         orders=orders,
         bookings=bookings,
-        unread_notifications=unread_notifications
+        unread_notifications=unread_notifications,
+        upcoming_booking=upcoming_booking
     )
 
 @app.route("/customer/profile")
@@ -741,6 +869,494 @@ def update_order(order_id):
 
 @app.route("/logout")
 def logout(): session.clear();return redirect(url_for("login"))
+
+@app.route("/admin/booking/edit/<int:booking_id>", methods=["GET", "POST"])
+def admin_edit_booking(booking_id):
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+    with db_connection() as conn:
+        booking = conn.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
+        if not booking:
+            abort(404)
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            email = request.form.get("email", "").strip().lower()
+            phone = request.form.get("phone", "").strip()
+            service = request.form.get("service", "").strip()
+            booking_date = request.form.get("booking_date", "").strip()
+            location = request.form.get("location", "").strip()
+            status = request.form.get("status", "").strip()
+            if not all([name, email, phone, service, booking_date, status]):
+                flash("Client Name, Email, Phone, Service, Date, and Status are required.", "error")
+                return render_template("edit_booking.html", booking=booking)
+            conn.execute(
+                "UPDATE bookings SET name=?, email=?, phone=?, service=?, booking_date=?, location=?, status=? WHERE id=?",
+                (name, email, phone, service, booking_date, location, status, booking_id)
+            )
+            flash("Booking updated successfully.", "success")
+            return redirect(url_for("admin") + "#bookings")
+    return render_template("edit_booking.html", booking=booking)
+
+@app.route("/admin/booking/delete/<int:booking_id>", methods=["POST"])
+def admin_delete_booking(booking_id):
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+    with db_connection() as conn:
+        conn.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
+    flash("Booking deleted successfully.", "success")
+    return redirect(url_for("admin") + "#bookings")
+
+@app.route("/admin/order/edit/<int:order_id>", methods=["GET", "POST"])
+def admin_edit_order(order_id):
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+    with db_connection() as conn:
+        order = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+        if not order:
+            abort(404)
+        if request.method == "POST":
+            customer_name = request.form.get("customer_name", "").strip()
+            items = request.form.get("items", "").strip()
+            status = request.form.get("status", "").strip()
+            try:
+                total = int(request.form.get("total", "0").strip())
+            except ValueError:
+                flash("Total Amount must be a valid number.", "error")
+                return render_template("edit_order.html", order=order)
+            if not all([customer_name, items, status]) or total < 0:
+                flash("Customer Name, Items, Status, and non-negative Total are required.", "error")
+                return render_template("edit_order.html", order=order)
+            conn.execute(
+                "UPDATE orders SET customer_name=?, items=?, total=?, status=? WHERE id=?",
+                (customer_name, items, total, status, order_id)
+            )
+            flash("Order updated successfully.", "success")
+            return redirect(url_for("admin") + "#orders")
+    return render_template("edit_order.html", order=order)
+
+@app.route("/admin/order/delete/<int:order_id>", methods=["POST"])
+def admin_delete_order(order_id):
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+    with db_connection() as conn:
+        conn.execute("DELETE FROM orders WHERE id=?", (order_id,))
+    flash("Order deleted successfully.", "success")
+    return redirect(url_for("admin") + "#orders")
+
+# ================= Standalone Story Store Helper & Routes =================
+
+def get_story_book(book_id):
+    str_id = str(book_id).strip()
+    with db_connection() as conn:
+        prod = conn.execute("SELECT * FROM products WHERE id=?", (str_id,)).fetchone()
+        if prod:
+            return dict(prod)
+        prods = [dict(row) for row in conn.execute("SELECT * FROM products ORDER BY name").fetchall()]
+        if str_id.isdigit():
+            idx = int(str_id) - 1
+            if 0 <= idx < len(prods):
+                return prods[idx]
+        for p in prods:
+            if p["id"].lower() == str_id.lower() or p["name"].lower() == str_id.lower():
+                return p
+    return None
+
+def get_cart_items():
+    cart = session.get("cart", {})
+    items = []
+    subtotal = 0
+    if isinstance(cart, dict):
+        for book_id, item_data in cart.items():
+            if isinstance(item_data, dict):
+                qty = item_data.get("quantity", 1)
+                price = item_data.get("price", 0)
+                item_subtotal = price * qty
+                subtotal += item_subtotal
+                items.append({
+                    "id": book_id,
+                    "name": item_data.get("name", "Book"),
+                    "category": item_data.get("category", "General"),
+                    "price": price,
+                    "image": item_data.get("image", "images/story-store/trick-treat1-img.jpeg"),
+                    "quantity": qty,
+                    "subtotal": item_subtotal
+                })
+    return items, subtotal
+
+@app.route("/story-store")
+def story_home():
+    books = catalog_products()
+    cart_items, _ = get_cart_items()
+    cart_count = sum(item["quantity"] for item in cart_items)
+    return render_template("story_home.html", books=books, cart_count=cart_count)
+
+@app.route("/story-store/categories")
+def story_categories():
+    books = catalog_products()
+    categories = {}
+    for b in books:
+        cat = b["category"]
+        categories[cat] = categories.get(cat, 0) + 1
+    cart_items, _ = get_cart_items()
+    cart_count = sum(item["quantity"] for item in cart_items)
+    return render_template("story_categories.html", categories=categories, books=books, cart_count=cart_count)
+
+@app.route("/story-store/books")
+def story_books():
+    books = catalog_products()
+    cart_items, _ = get_cart_items()
+    cart_count = sum(item["quantity"] for item in cart_items)
+    return render_template("story_books.html", books=books, cart_count=cart_count)
+
+@app.route("/story-store/book/<book_id>")
+def story_book_details(book_id):
+    book = get_story_book(book_id)
+    if not book:
+        abort(404)
+    cart_items, _ = get_cart_items()
+    cart_count = sum(item["quantity"] for item in cart_items)
+    return render_template("story_book_details.html", book=book, cart_count=cart_count)
+
+@app.route("/story-store/cart")
+def story_cart():
+    cart_items, subtotal = get_cart_items()
+    cart_count = sum(item["quantity"] for item in cart_items)
+    return render_template("story_cart.html", cart_items=cart_items, subtotal=subtotal, total=subtotal, cart_count=cart_count)
+
+@app.route("/story-store/cart/add", methods=["POST"])
+def story_cart_add():
+    book_id = request.form.get("book_id")
+    try:
+        qty = max(1, int(request.form.get("quantity", 1)))
+    except ValueError:
+        qty = 1
+    book = get_story_book(book_id)
+    if not book:
+        flash("Book not found.", "error")
+        return redirect(url_for("story_books"))
+    cart = session.get("cart", {})
+    if not isinstance(cart, dict):
+        cart = {}
+    key = str(book["id"])
+    if key in cart:
+        cart[key]["quantity"] += qty
+    else:
+        cart[key] = {
+            "name": book["name"],
+            "category": book["category"],
+            "price": book["price"],
+            "image": book["image"],
+            "quantity": qty
+        }
+    session["cart"] = cart
+    session.modified = True
+    flash(f"Added '{book['name']}' to your cart.", "success")
+    return redirect(url_for("story_cart"))
+
+@app.route("/story-store/cart/update", methods=["POST"])
+def story_cart_update():
+    book_id = str(request.form.get("book_id", ""))
+    action = request.form.get("action", "")
+    cart = session.get("cart", {})
+    if isinstance(cart, dict) and book_id in cart:
+        if action == "increase":
+            cart[book_id]["quantity"] += 1
+        elif action == "decrease":
+            cart[book_id]["quantity"] -= 1
+            if cart[book_id]["quantity"] <= 0:
+                del cart[book_id]
+        elif action == "remove":
+            del cart[book_id]
+        elif "quantity" in request.form:
+            try:
+                new_q = int(request.form.get("quantity"))
+                if new_q > 0:
+                    cart[book_id]["quantity"] = new_q
+                else:
+                    del cart[book_id]
+            except ValueError:
+                pass
+        session["cart"] = cart
+        session.modified = True
+    return redirect(url_for("story_cart"))
+
+@app.route("/story-store/checkout", methods=["GET", "POST"])
+def story_checkout():
+    cart_items, subtotal = get_cart_items()
+    if not cart_items:
+        flash("Your cart is empty.", "error")
+        return redirect(url_for("story_books"))
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip()
+        phone = request.form.get("phone", "").strip()
+        address = request.form.get("address", "").strip()
+        city = request.form.get("city", "").strip()
+        if not all([name, email, phone, address, city]):
+            flash("Please fill in all shipping details.", "error")
+            return render_template("story_checkout.html", cart_items=cart_items, subtotal=subtotal, total=subtotal)
+        session["pending_story_order"] = {
+            "customer_name": name,
+            "email": email,
+            "phone": phone,
+            "address": f"{address}, {city}",
+            "items": ", ".join(f"{i['name']} x {i['quantity']}" for i in cart_items),
+            "total": subtotal
+        }
+        return redirect(url_for("story_payment"))
+
+    customer_info = {}
+    if session.get("customer_id"):
+        with db_connection() as conn:
+            cust = conn.execute("SELECT * FROM customers WHERE id=?", (session["customer_id"],)).fetchone()
+            if cust:
+                customer_info = dict(cust)
+
+    cart_count = sum(item["quantity"] for item in cart_items)
+    return render_template("story_checkout.html", cart_items=cart_items, subtotal=subtotal, total=subtotal, customer_info=customer_info, cart_count=cart_count)
+
+@app.route("/story-store/payment", methods=["GET", "POST"])
+def story_payment():
+    cart_items, subtotal = get_cart_items()
+    order = session.get("pending_story_order")
+    if not order and cart_items:
+        order = {
+            "customer_name": session.get("customer_name", "Guest Customer"),
+            "email": "customer@example.com",
+            "phone": "9876543210",
+            "address": "Coimbatore, Tamil Nadu",
+            "items": ", ".join(f"{i['name']} x {i['quantity']}" for i in cart_items),
+            "total": subtotal
+        }
+    if not order:
+        flash("No active order found. Please checkout first.", "error")
+        return redirect(url_for("story_books"))
+
+    if request.method == "POST":
+        return redirect(url_for("story_order_success"))
+
+    return render_template(
+        "story_payment.html",
+        order=order,
+        cart_items=cart_items,
+        amount=order.get("total", subtotal),
+        upi_id=UPI_ID,
+        cart_count=sum(i["quantity"] for i in cart_items)
+    )
+
+@app.route("/story-store/order-success", methods=["GET", "POST"])
+def story_order_success():
+    order_info = session.pop("pending_story_order", None)
+    cart_items, subtotal = get_cart_items()
+    if not order_info and cart_items:
+        order_info = {
+            "customer_name": session.get("customer_name", "Guest Customer"),
+            "email": "customer@example.com",
+            "phone": "9876543210",
+            "address": "Coimbatore, Tamil Nadu",
+            "items": ", ".join(f"{i['name']} x {i['quantity']}" for i in cart_items),
+            "total": subtotal
+        }
+    
+    order_id = None
+    if order_info:
+        customer_id = session.get("customer_id")
+        payment_method = request.form.get("method", "Razorpay / UPI")
+        with db_connection() as conn:
+            cur = conn.execute(
+                "INSERT INTO orders (customer_name, email, phone, address, items, total, status, payment_status, payment_method, customer_id) VALUES (?, ?, ?, ?, ?, ?, 'New', 'Paid', ?, ?)",
+                (order_info["customer_name"], order_info["email"], order_info["phone"], order_info["address"], order_info["items"], order_info["total"], payment_method, customer_id)
+            )
+            order_id = cur.lastrowid
+            subject = f"Order Confirmation - AK CLICKS Story Store (#ORD-{order_id})"
+            body = f"Hello {order_info['customer_name']},\n\nThank you for your order!\n\nOrder ID: ORD-{order_id}\nItems: {order_info['items']}\nTotal: ₹{order_info['total']}\n\nWe will ship your books shortly."
+            queue_notification(conn, order_info["email"], "email", subject, body)
+
+    # Generate synthetic IDs & delivery date
+    order_id_num = order_id or 1001
+    payment_id = f"PAY-STORY-{order_id_num}982"
+    txn_id = f"TXN-STORY-{order_id_num}441"
+    order_date = datetime.now().strftime("%B %d, %Y")
+    est_delivery = (datetime.now() + timedelta(days=6)).strftime("%B %d, %Y")
+
+    full_order_details = {
+        "order_id": order_id_num,
+        "payment_id": payment_id,
+        "txn_id": txn_id,
+        "order_date": order_date,
+        "est_delivery": est_delivery,
+        "customer_name": order_info.get("customer_name", "Valued Customer") if order_info else "Valued Customer",
+        "email": order_info.get("email", "customer@example.com") if order_info else "customer@example.com",
+        "address": order_info.get("address", "Tamil Nadu, India") if order_info else "Tamil Nadu, India",
+        "items": order_info.get("items", "Story Books") if order_info else "Story Books",
+        "cart_items": cart_items,
+        "total": order_info.get("total", subtotal) if order_info else subtotal,
+        "payment_method": request.form.get("method", "Razorpay / UPI")
+    }
+
+    session.pop("cart", None)
+    session.modified = True
+
+    return render_template("story_order_success.html", order=full_order_details, order_id=order_id_num)
+
+@app.route("/story-store/payment/qr")
+def story_payment_qr():
+    img = qrcode.make("upi://pay?pa=payments@akclicks&pn=AK%20STORY%20STORE&cu=INR")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return Response(buf.getvalue(), mimetype="image/png")
+
+def generate_story_receipt_pdf(order_data):
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=22, leading=26, textColor=colors.HexColor('#ff4820'))
+    h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=12, leading=16, textColor=colors.HexColor('#111111'))
+    body_style = ParagraphStyle('BodyStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, leading=14, textColor=colors.HexColor('#333333'))
+    body_bold = ParagraphStyle('BodyBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, leading=14, textColor=colors.HexColor('#111111'))
+    footer_style = ParagraphStyle('FooterStyle', parent=styles['Normal'], fontName='Helvetica-Oblique', fontSize=9, leading=12, textColor=colors.HexColor('#777777'), alignment=1)
+
+    elements = []
+
+    # Brand Header
+    elements.append(Paragraph("AK STORY STORE", title_style))
+    elements.append(Paragraph("Official Purchase Receipt & Tax Invoice", body_style))
+    elements.append(Spacer(1, 10))
+    elements.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#ff4820'), spaceAfter=15))
+
+    # Meta Grid (Receipt, Order, Payment IDs)
+    receipt_no = f"REC-ORD-{order_data.get('order_id', 1001)}"
+    order_no = f"ORD-{order_data.get('order_id', 1001)}"
+    txn_id = order_data.get('txn_id', f"TXN-STORY-{order_data.get('order_id', 1001)}")
+    pay_id = order_data.get('payment_id', f"PAY-STORY-{order_data.get('order_id', 1001)}")
+    date_str = order_data.get('order_date', datetime.now().strftime("%B %d, %Y"))
+
+    meta_data = [
+        [Paragraph(f"<b>Receipt No:</b> {receipt_no}", body_style), Paragraph(f"<b>Date:</b> {date_str}", body_style)],
+        [Paragraph(f"<b>Order No:</b> {order_no}", body_style), Paragraph(f"<b>Payment Status:</b> <font color='#27ae60'><b>PAID</b></font>", body_style)],
+        [Paragraph(f"<b>Transaction ID:</b> {txn_id}", body_style), Paragraph(f"<b>Payment Method:</b> {order_data.get('payment_method', 'Razorpay / UPI')}", body_style)],
+        [Paragraph(f"<b>Payment ID:</b> {pay_id}", body_style), Paragraph(f"<b>Estimated Delivery:</b> {order_data.get('est_delivery', '5-7 Business Days')}", body_style)]
+    ]
+    meta_table = Table(meta_data, colWidths=[270, 270])
+    meta_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f9f9f9')),
+        ('PADDING', (0,0), (-1,-1), 6),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    elements.append(meta_table)
+    elements.append(Spacer(1, 15))
+
+    # Customer & Shipping Information
+    elements.append(Paragraph("Customer & Shipping Details", h2_style))
+    cust_data = [
+        [Paragraph(f"<b>Customer Name:</b> {order_data.get('customer_name', 'Guest')}", body_style)],
+        [Paragraph(f"<b>Email:</b> {order_data.get('email', 'N/A')}", body_style)],
+        [Paragraph(f"<b>Shipping Address:</b> {order_data.get('address', 'N/A')}", body_style)]
+    ]
+    cust_table = Table(cust_data, colWidths=[540])
+    cust_table.setStyle(TableStyle([
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+    elements.append(cust_table)
+    elements.append(Spacer(1, 15))
+
+    # Itemized Table
+    elements.append(Paragraph("Book Details", h2_style))
+    items_header = [Paragraph("<b>Book Title</b>", body_bold), Paragraph("<b>Qty</b>", body_bold), Paragraph("<b>Price</b>", body_bold), Paragraph("<b>Subtotal</b>", body_bold)]
+    table_rows = [items_header]
+
+    cart_items = order_data.get("cart_items", [])
+    if not cart_items:
+        table_rows.append([
+            Paragraph(f"<b>{order_data.get('items', 'Story Book')}</b>", body_style),
+            Paragraph("1", body_style),
+            Paragraph(f"₹{order_data.get('total', 0)}", body_style),
+            Paragraph(f"₹{order_data.get('total', 0)}", body_style)
+        ])
+    else:
+        for item in cart_items:
+            table_rows.append([
+                Paragraph(f"<b>{item['name']}</b><br/><font size=8 color='#666666'>{item.get('category', 'Book')}</font>", body_style),
+                Paragraph(str(item['quantity']), body_style),
+                Paragraph(f"₹{item['price']}", body_style),
+                Paragraph(f"₹{item['subtotal']}", body_style)
+            ])
+
+    items_table = Table(table_rows, colWidths=[280, 60, 100, 100])
+    items_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#222222')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e0e0e0')),
+        ('PADDING', (0,0), (-1,-1), 6),
+    ]))
+    elements.append(items_table)
+    elements.append(Spacer(1, 15))
+
+    # Totals Summary
+    grand_total_val = order_data.get('total', 0)
+
+    totals_data = [
+        ["", Paragraph("<b>Subtotal:</b>", body_style), Paragraph(f"₹{grand_total_val}", body_style)],
+        ["", Paragraph("<b>Shipping:</b>", body_style), Paragraph("FREE", body_style)],
+        ["", Paragraph("<b>Grand Total:</b>", body_bold), Paragraph(f"<b>₹{grand_total_val}</b>", title_style)]
+    ]
+    totals_table = Table(totals_data, colWidths=[280, 140, 120])
+    totals_table.setStyle(TableStyle([
+        ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+    elements.append(totals_table)
+    elements.append(Spacer(1, 25))
+
+    # Footer
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor('#dddddd'), spaceAfter=15))
+    elements.append(Paragraph("Thank you for your purchase from AK Story Store!", footer_style))
+    elements.append(Spacer(1, 4))
+    elements.append(Paragraph("Generated by AK Story Store &middot; Official Receipt", footer_style))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+@app.route("/story-store/download-receipt/<int:order_id>")
+def story_download_receipt(order_id):
+    with db_connection() as conn:
+        order_row = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+    if not order_row:
+        flash("Order not found.", "error")
+        return redirect(url_for("story_books"))
+    
+    order = dict(order_row)
+    order_data = {
+        "order_id": order["id"],
+        "customer_name": order["customer_name"],
+        "email": order["email"],
+        "phone": order["phone"],
+        "address": order["address"],
+        "items": order["items"],
+        "total": order["total"],
+        "payment_method": order.get("payment_method", "Razorpay / UPI"),
+        "order_date": order.get("created_at", datetime.now().strftime("%B %d, %Y")),
+        "txn_id": f"TXN-STORY-{order['id']}441",
+        "payment_id": f"PAY-STORY-{order['id']}982",
+        "est_delivery": "5 - 7 Business Days"
+    }
+    
+    pdf_buffer = generate_story_receipt_pdf(order_data)
+    return send_file(
+        pdf_buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"AK_Story_Store_Receipt_ORD-{order['id']}.pdf"
+    )
 
 # Initialize database
 with app.app_context():

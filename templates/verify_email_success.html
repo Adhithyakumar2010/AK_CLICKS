@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Email Verified | AK CLICKS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="auth-page">
+  <main class="auth-card">
+    <a class="auth-brand" href="{{ url_for('home') }}">AK <span>CLICKS</span></a>
+    <p class="eyebrow">Account verification</p>
+    <h1>Email Verified!</h1>
+    <p class="auth-intro">Thank you for verifying your email address. Your AK CLICKS account is now fully activated.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <p class="form-message {{ category }}">{{ message }}</p>
+      {% endfor %}
+    {% endwith %}
+    <div class="auth-links">
+      <a class="button" href="{{ url_for('customer_login') }}" style="text-align: center;">Proceed to Login <span>&rarr;</span></a>
+      <a class="auth-secondary-button" href="{{ url_for('home') }}">&larr; Back to Home</a>
+    </div>
+  </main>
+</body>
+</html>

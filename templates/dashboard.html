@@ -63,6 +63,14 @@
 
 </div>
 
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <div style="margin-bottom:20px; padding:12px 18px; border-radius:6px; background:{% if category=='error' %}#ffe0df{% else %}#dff3e5{% endif %}; color:{% if category=='error' %}#8d2b28{% else %}#176733{% endif %}; font-weight:bold;">
+      {{ message }}
+    </div>
+  {% endfor %}
+{% endwith %}
+
 <!-- ================= Cards ================= -->
 
 <div class="cards">
@@ -146,6 +154,8 @@
 
 <th>Status</th>
 
+<th>Actions</th>
+
 </tr>
 
 </thead>
@@ -228,13 +238,22 @@ selected
 
 </td>
 
+<td>
+  <div style="display:flex; gap:6px; align-items:center;">
+    <a href="{{ url_for('admin_edit_booking', booking_id=booking.id) }}" style="background:#317dba; color:white; padding:6px 10px; border-radius:4px; text-decoration:none; font-size:13px; font-weight:bold;">✏️ Edit</a>
+    <form action="{{ url_for('admin_delete_booking', booking_id=booking.id) }}" method="post" style="display:inline;" onsubmit="return confirm('Are you sure you want to permanently delete this booking?');">
+      <button type="submit" style="background:#bf4c49; color:white; padding:6px 10px; border-radius:4px; border:none; font-size:13px; font-weight:bold; cursor:pointer;">🗑 Delete</button>
+    </form>
+  </div>
+</td>
+
 </tr>
 
 {% else %}
 
 <tr>
 
-<td colspan="5">
+<td colspan="6">
 
 No Bookings Found
 
@@ -267,6 +286,7 @@ No Bookings Found
 <th>Total</th>
 <th>Payment</th>
 <th>Status</th>
+<th>Actions</th>
 
 </tr>
 
@@ -318,13 +338,22 @@ No Bookings Found
 
 </td>
 
+<td>
+  <div style="display:flex; gap:6px; align-items:center;">
+    <a href="{{ url_for('admin_edit_order', order_id=order.id) }}" style="background:#317dba; color:white; padding:6px 10px; border-radius:4px; text-decoration:none; font-size:13px; font-weight:bold;">✏️ Edit</a>
+    <form action="{{ url_for('admin_delete_order', order_id=order.id) }}" method="post" style="display:inline;" onsubmit="return confirm('Are you sure you want to permanently delete this order?');">
+      <button type="submit" style="background:#bf4c49; color:white; padding:6px 10px; border-radius:4px; border:none; font-size:13px; font-weight:bold; cursor:pointer;">🗑 Delete</button>
+    </form>
+  </div>
+</td>
+
 </tr>
 
 {% else %}
 
 <tr>
 
-<td colspan="5">
+<td colspan="6">
 
 No Orders Found
 
