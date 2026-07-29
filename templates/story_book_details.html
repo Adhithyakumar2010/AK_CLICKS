@@ -16,7 +16,7 @@
                 <li><a href="{{ url_for('story_home') }}" class="nav__link">Home</a></li>
                 <li><a href="{{ url_for('story_categories') }}" class="nav__link">Categories</a></li>
                 <li><a href="{{ url_for('story_books') }}" class="nav__link">Books</a></li>
-                <li><a href="{{ url_for('home') }}" class="nav__link">Main Website</a></li>
+                <li><a href="{{ url_for('story_wishlist') }}" class="nav__link">❤️ Wishlist (<span class="wishlist-badge-count">{{ wishlist_count|default(0) }}</span>)</a></li>
                 <li><a href="{{ url_for('story_cart') }}" class="nav__cart">🛒 Cart ({{ cart_count|default(0) }})</a></li>
             </ul>
         </div>
@@ -33,37 +33,132 @@
     {% endwith %}
 
     <main class="main section container">
-        <div style="margin-bottom: 2rem;">
-            <a href="{{ url_for('story_books') }}" class="continue-shopping-link">&larr; Continue Shopping (All Books)</a>
-        </div>
+        <!-- Breadcrumb Navigation -->
+        <nav style="margin-bottom:1.5rem; font-size:var(--small-font-size); color:var(--text-color-light);">
+            <a href="{{ url_for('story_home') }}" style="color:var(--text-color);">Home</a> &gt; 
+            <a href="{{ url_for('story_books') }}" style="color:var(--text-color);">Books</a> &gt; 
+            <span>{{ book.category }}</span> &gt; 
+            <span style="color:var(--first-color);">{{ book.name }}</span>
+        </nav>
 
+        <!-- Product Hero Grid -->
         <div class="book-details-container">
-            <div class="book-media">
-                <img src="{{ url_for('static', filename=book.image) }}" alt="{{ book.name }}">
+            <!-- Cover Media with Image Zoom -->
+            <div class="book-media" style="position:relative; overflow:hidden; border-radius:1rem;">
+                <img src="{{ url_for('static', filename=book.image) }}" alt="{{ book.name }}" id="zoomBookImg" style="transition:transform 0.3s ease; cursor:zoom-in;">
+                <span style="position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,0.7); color:#fff; font-size:.7rem; padding:.2rem .5rem; border-radius:.3rem;">🔍 Hover to Zoom</span>
             </div>
 
+            <!-- Info & Actions Column -->
             <div class="book-info">
-                <span class="book-card__tag">{{ book.category }}</span>
-                <h1>{{ book.name }}</h1>
-                <p class="book-author">Category: {{ book.category }} &middot; Stock: {{ book.stock|default(10) }} Available</p>
-                <div class="book-price-tag">₹{{ book.price }}</div>
+                <div style="display:flex; gap:.5rem; align-items:center; margin-bottom:.5rem;">
+                    <span class="book-card__tag">{{ book.category }}</span>
+                    {% if book.is_bestseller %}<span style="background:#e67e22; color:#fff; font-size:.7rem; padding:.2rem .5rem; border-radius:.25rem; font-weight:bold;">BEST SELLER</span>{% endif %}
+                    {% if book.is_trending %}<span style="background:#8e44ad; color:#fff; font-size:.7rem; padding:.2rem .5rem; border-radius:.25rem; font-weight:bold;">TRENDING</span>{% endif %}
+                </div>
 
-                <p class="book-description">
+                <h1>{{ book.name }}</h1>
+                <p class="book-author">By <strong>{{ book.author|default('AK Authors') }}</strong> &middot; Publisher: {{ book.publisher|default('AK Publications') }}</p>
+                
+                <!-- Rating Stars & Reviews -->
+                <div style="color:#f39c12; font-size:1.1rem; margin-bottom:1rem;">
+                    ★★★★★ <span style="color:var(--text-color); font-size:var(--small-font-size);">{{ book.rating|default(4.8) }} / 5.0 ({{ book.reviews_count|default(124) }} Customer Reviews)</span>
+                </div>
+
+                <!-- Price Tag & Stock -->
+                <div style="display:flex; align-items:baseline; gap:1rem; margin-bottom:1rem;">
+                    <div class="book-price-tag" style="margin:0;">₹{{ book.price }}</div>
+                    {% if book.discount_price > 0 %}
+                    <span style="text-decoration:line-through; color:var(--text-color-light); font-size:1.2rem;">₹{{ book.price + 150 }}</span>
+                    <span style="color:#2ecc71; font-weight:bold; font-size:.9rem;">(Save ₹150)</span>
+                    {% endif %}
+                </div>
+
+                <!-- Stock Availability & Delivery -->
+                <div style="margin-bottom:1.5rem; display:flex; gap:1.5rem; font-size:var(--small-font-size);">
+                    <div>Status: <strong style="color:{% if book.stock > 0 %}#2ecc71{% else %}#e74c3c{% endif %};">{% if book.stock > 0 %}✓ In Stock ({{ book.stock }} copies){% else %}✕ Out of Stock{% endif %}</strong></div>
+                    <div>Delivery: <strong style="color:var(--title-color);">🚚 5 - 7 Business Days</strong></div>
+                </div>
+
+                <!-- Description -->
+                <p class="book-description" style="margin-bottom:1.5rem;">
                     {{ book.description }}
                 </p>
 
-                <form action="{{ url_for('story_cart_add') }}" method="post" class="book-actions-form">
-                    <input type="hidden" name="book_id" value="{{ book.id }}">
-                    <div class="qty-control-group">
-                        <button type="button" class="qty-btn" onclick="const input = this.parentNode.querySelector('input'); input.value = Math.max(1, parseInt(input.value) - 1);">-</button>
-                        <input type="number" name="quantity" value="1" min="1" class="qty-input" readonly>
-                        <button type="button" class="qty-btn" onclick="const input = this.parentNode.querySelector('input'); input.value = parseInt(input.value) + 1;">+</button>
-                    </div>
-                    <button type="submit" class="button">Add to Cart &rarr;</button>
-                    <a href="{{ url_for('story_books') }}" class="button button--ghost">Explore More</a>
-                </form>
+                <!-- Metadata Table Grid -->
+                <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:.75rem; background:rgba(0,0,0,0.3); border:1px solid var(--card-border); padding:1rem; border-radius:.75rem; margin-bottom:1.5rem; font-size:var(--small-font-size);">
+                    <div><strong>Genre:</strong> {{ book.genre|default('Fiction') }}</div>
+                    <div><strong>Language:</strong> {{ book.language|default('English') }}</div>
+                    <div><strong>ISBN:</strong> {{ book.isbn|default('978-0-123456-78-9') }}</div>
+                    <div><strong>Pages:</strong> {{ book.pages|default(350) }} pages</div>
+                </div>
+
+                <!-- Action Buttons: Add to Cart & Buy Now -->
+                <div style="display:flex; flex-wrap:wrap; gap:1rem; align-items:center;">
+                    <form action="{{ url_for('story_cart_add') }}" method="post" style="display:flex; gap:1rem; align-items:center;">
+                        <input type="hidden" name="book_id" value="{{ book.id }}">
+                        <div class="qty-control-group">
+                            <button type="button" class="qty-btn" onclick="const input = this.parentNode.querySelector('input'); input.value = Math.max(1, parseInt(input.value) - 1);">-</button>
+                            <input type="number" name="quantity" value="1" min="1" class="qty-input" readonly>
+                            <button type="button" class="qty-btn" onclick="const input = this.parentNode.querySelector('input'); input.value = parseInt(input.value) + 1;">+</button>
+                        </div>
+                        <button type="submit" class="button">Add to Cart &rarr;</button>
+                    </form>
+
+                    <!-- Buy Now Button (Direct Checkout Flow) -->
+                    <form action="{{ url_for('story_buy_now', book_id=book.id) }}" method="post" style="margin:0;">
+                        <button type="submit" class="button" style="background:#e67e22;">⚡ Buy Now</button>
+                    </form>
+
+                    <!-- Wishlist & Share -->
+                    <button type="button" onclick="toggleWishlist('{{ book.id }}', this);" class="button button--ghost" style="padding:.75rem 1rem;">
+                        ❤️ Wishlist
+                    </button>
+                </div>
             </div>
         </div>
+
+        <!-- Smart Recommendations: You May Also Like -->
+        {% if related_genre %}
+        <section class="section" style="padding-top:4rem;">
+            <h2 class="section__title">You May Also Like (Same Genre)</h2>
+            <div class="books__container grid">
+                {% for b in related_genre %}
+                <article class="book-card">
+                    <span class="book-card__tag">{{ b.category }}</span>
+                    <img src="{{ url_for('static', filename=b.image) }}" alt="{{ b.name }}" class="book-card__img">
+                    <h3 class="book-card__title">{{ b.name }}</h3>
+                    <p class="book-card__author">By {{ b.author|default('AK Authors') }}</p>
+                    <div class="book-card__footer">
+                        <span class="book-card__price">₹{{ b.price }}</span>
+                        <a href="{{ url_for('story_book_details', book_id=b.id) }}" class="button" style="padding:.4rem .8rem; font-size:.8rem;">View Book</a>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- Recently Viewed Section -->
+        {% if recently_books %}
+        <section class="section" style="padding-top:2rem;">
+            <h2 class="section__title">Recently Viewed Books</h2>
+            <div class="books__container grid">
+                {% for b in recently_books %}
+                <article class="book-card">
+                    <span class="book-card__tag">{{ b.category }}</span>
+                    <img src="{{ url_for('static', filename=b.image) }}" alt="{{ b.name }}" class="book-card__img">
+                    <h3 class="book-card__title">{{ b.name }}</h3>
+                    <p class="book-card__author">By {{ b.author|default('AK Authors') }}</p>
+                    <div class="book-card__footer">
+                        <span class="book-card__price">₹{{ b.price }}</span>
+                        <a href="{{ url_for('story_book_details', book_id=b.id) }}" class="button button--ghost" style="padding:.4rem .8rem; font-size:.8rem;">View Book</a>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
     </main>
 
     <footer class="footer">
@@ -71,5 +166,21 @@
     </footer>
 
     <script src="{{ url_for('static', filename='js/story-store.js') }}"></script>
+    <script>
+        // Image Zoom Hover Effect
+        const zoomImg = document.getElementById('zoomBookImg');
+        if (zoomImg) {
+            zoomImg.addEventListener('mousemove', function(e) {
+                const { left, top, width, height } = this.getBoundingClientRect();
+                const x = (e.clientX - left) / width * 100;
+                const y = (e.clientY - top) / height * 100;
+                this.style.transformOrigin = `${x}% ${y}%`;
+                this.style.transform = 'scale(1.8)';
+            });
+            zoomImg.addEventListener('mouseleave', function() {
+                this.style.transform = 'scale(1)';
+            });
+        }
+    </script>
 </body>
 </html>

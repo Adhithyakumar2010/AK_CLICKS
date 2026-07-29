@@ -114,8 +114,35 @@ def init_db():
         add_column_if_missing(conn, "customers", "reset_token_expiry", "DATETIME")
         add_column_if_missing(conn, "notifications", "is_read", "INTEGER NOT NULL DEFAULT 0")
 
+        # Product Metadata Columns
+        add_column_if_missing(conn, "products", "author", "TEXT DEFAULT 'Ken Follett'")
+        add_column_if_missing(conn, "products", "publisher", "TEXT DEFAULT 'AK Publications'")
+        add_column_if_missing(conn, "products", "genre", "TEXT DEFAULT 'Fiction'")
+        add_column_if_missing(conn, "products", "language", "TEXT DEFAULT 'English'")
+        add_column_if_missing(conn, "products", "isbn", "TEXT DEFAULT '978-0-123456-78-9'")
+        add_column_if_missing(conn, "products", "pub_date", "TEXT DEFAULT '2024'")
+        add_column_if_missing(conn, "products", "pages", "INTEGER DEFAULT 350")
+        add_column_if_missing(conn, "products", "rating", "REAL DEFAULT 4.8")
+        add_column_if_missing(conn, "products", "reviews_count", "INTEGER DEFAULT 124")
+        add_column_if_missing(conn, "products", "discount_price", "INTEGER DEFAULT 0")
+        add_column_if_missing(conn, "products", "is_new", "INTEGER DEFAULT 1")
+        add_column_if_missing(conn, "products", "is_bestseller", "INTEGER DEFAULT 1")
+        add_column_if_missing(conn, "products", "is_trending", "INTEGER DEFAULT 1")
+        add_column_if_missing(conn, "products", "is_editors_choice", "INTEGER DEFAULT 1")
+
+        # Wishlist Table
+        conn.execute("CREATE TABLE IF NOT EXISTS wishlist (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER NOT NULL, book_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(customer_id, book_id))")
+
         for item in PRODUCTS:
             conn.execute("INSERT OR IGNORE INTO products (id,name,category,price,image,description,stock) VALUES (:id,:name,:category,:price,:image,:description,10)", item)
+
+        # Update metadata for existing products
+        conn.execute("UPDATE products SET author='Ken Follett', genre='Fiction', rating=4.9, is_bestseller=1, discount_price=249 WHERE id='armor-of-light'")
+        conn.execute("UPDATE products SET author='Elliott O''Donnell', genre='Horror', rating=4.6, is_trending=1, discount_price=499 WHERE id='real-ghost-stories'")
+        conn.execute("UPDATE products SET author='J.K. Rowling', genre='Fantasy', rating=4.9, is_bestseller=1, discount_price=699 WHERE id='harry-potter'")
+        conn.execute("UPDATE products SET author='Benedict Wells', genre='Romance', rating=4.7, is_editors_choice=1, discount_price=450 WHERE id='end-of-loneliness'")
+        conn.execute("UPDATE products SET author='J.R.R. Tolkien', genre='Fantasy', rating=5.0, is_bestseller=1, discount_price=899 WHERE id='lord-of-rings'")
+        conn.execute("UPDATE products SET author='Colleen Hoover', genre='Thriller', rating=4.8, is_trending=1, discount_price=449 WHERE id='verity'")
 
 def catalog_products():
     with db_connection() as conn:
@@ -983,12 +1010,40 @@ def get_cart_items():
                 })
     return items, subtotal
 
+def get_wishlist_ids():
+    cust_id = session.get("customer_id")
+    if cust_id:
+        with db_connection() as conn:
+            rows = conn.execute("SELECT book_id FROM wishlist WHERE customer_id=?", (cust_id,)).fetchall()
+            return set(r["book_id"] for r in rows)
+    else:
+        return set(session.get("wishlist", []))
+
+def get_wishlist_count():
+    return len(get_wishlist_ids())
+
 @app.route("/story-store")
 def story_home():
     books = catalog_products()
     cart_items, _ = get_cart_items()
     cart_count = sum(item["quantity"] for item in cart_items)
-    return render_template("story_home.html", books=books, cart_count=cart_count)
+    wishlist_ids = get_wishlist_ids()
+    with db_connection() as conn:
+        bestsellers = [dict(r) for r in conn.execute("SELECT * FROM products WHERE is_bestseller=1 LIMIT 4").fetchall()]
+        trending = [dict(r) for r in conn.execute("SELECT * FROM products WHERE is_trending=1 LIMIT 4").fetchall()]
+        new_releases = [dict(r) for r in conn.execute("SELECT * FROM products WHERE is_new=1 LIMIT 4").fetchall()]
+        editors_picks = [dict(r) for r in conn.execute("SELECT * FROM products WHERE is_editors_choice=1 LIMIT 4").fetchall()]
+    return render_template(
+        "story_home.html",
+        books=books,
+        bestsellers=bestsellers,
+        trending=trending,
+        new_releases=new_releases,
+        editors_picks=editors_picks,
+        cart_count=cart_count,
+        wishlist_count=len(wishlist_ids),
+        wishlist_ids=wishlist_ids
+    )
 
 @app.route("/story-store/categories")
 def story_categories():
@@ -999,23 +1054,259 @@ def story_categories():
         categories[cat] = categories.get(cat, 0) + 1
     cart_items, _ = get_cart_items()
     cart_count = sum(item["quantity"] for item in cart_items)
-    return render_template("story_categories.html", categories=categories, books=books, cart_count=cart_count)
+    wishlist_ids = get_wishlist_ids()
+    return render_template("story_categories.html", categories=categories, books=books, cart_count=cart_count, wishlist_count=len(wishlist_ids))
 
 @app.route("/story-store/books")
 def story_books():
-    books = catalog_products()
+    q = request.args.get("q", "").strip()
+    genre = request.args.get("genre", "").strip()
+    lang = request.args.get("lang", "").strip()
+    price_range = request.args.get("price", "").strip()
+    min_rating = request.args.get("rating", "").strip()
+    availability = request.args.get("availability", "").strip()
+    collection = request.args.get("collection", "").strip()
+    sort = request.args.get("sort", "newest").strip()
+
+    sql = "SELECT * FROM products WHERE 1=1"
+    params = []
+
+    if q:
+        sql += " AND (name LIKE ? OR author LIKE ? OR category LIKE ? OR genre LIKE ? OR publisher LIKE ?)"
+        term = f"%{q}%"
+        params.extend([term, term, term, term, term])
+
+    if genre:
+        sql += " AND genre=?"
+        params.append(genre)
+
+    if lang:
+        sql += " AND language=?"
+        params.append(lang)
+
+    if price_range == "under500":
+        sql += " AND price < 500"
+    elif price_range == "500-1000":
+        sql += " AND price BETWEEN 500 AND 1000"
+    elif price_range == "1000-2500":
+        sql += " AND price BETWEEN 1000 AND 2500"
+    elif price_range == "above2500":
+        sql += " AND price > 2500"
+
+    if min_rating:
+        try:
+            sql += " AND rating >= ?"
+            params.append(float(min_rating))
+        except ValueError:
+            pass
+
+    if availability == "instock":
+        sql += " AND stock > 0"
+    elif availability == "outstock":
+        sql += " AND stock <= 0"
+
+    if collection == "new":
+        sql += " AND is_new = 1"
+    elif collection == "bestseller":
+        sql += " AND is_bestseller = 1"
+    elif collection == "trending":
+        sql += " AND is_trending = 1"
+    elif collection == "editors":
+        sql += " AND is_editors_choice = 1"
+
+    # Sorting
+    if sort == "oldest":
+        sql += " ORDER BY pub_date ASC, name ASC"
+    elif sort == "price_low":
+        sql += " ORDER BY price ASC"
+    elif sort == "price_high":
+        sql += " ORDER BY price DESC"
+    elif sort == "bestselling":
+        sql += " ORDER BY is_bestseller DESC, rating DESC"
+    elif sort == "rating":
+        sql += " ORDER BY rating DESC"
+    elif sort == "alpha_az":
+        sql += " ORDER BY name ASC"
+    elif sort == "alpha_za":
+        sql += " ORDER BY name DESC"
+    else:
+        sql += " ORDER BY is_new DESC, name ASC"
+
+    with db_connection() as conn:
+        books = [dict(row) for row in conn.execute(sql, params).fetchall()]
+
     cart_items, _ = get_cart_items()
     cart_count = sum(item["quantity"] for item in cart_items)
-    return render_template("story_books.html", books=books, cart_count=cart_count)
+    wishlist_ids = get_wishlist_ids()
+
+    return render_template(
+        "story_books.html",
+        books=books,
+        cart_count=cart_count,
+        wishlist_count=len(wishlist_ids),
+        wishlist_ids=wishlist_ids,
+        active_filters={
+            "q": q, "genre": genre, "lang": lang, "price": price_range,
+            "rating": min_rating, "availability": availability,
+            "collection": collection, "sort": sort
+        }
+    )
+
+@app.route("/story-store/api/search")
+def story_api_search():
+    q = request.args.get("q", "").strip()
+    if not q or len(q) < 2:
+        return jsonify([])
+    sql = "SELECT id, name, author, category, price, image FROM products WHERE (name LIKE ? OR author LIKE ? OR category LIKE ? OR genre LIKE ?) LIMIT 6"
+    term = f"%{q}%"
+    with db_connection() as conn:
+        rows = [dict(r) for r in conn.execute(sql, (term, term, term, term)).fetchall()]
+    return jsonify(rows)
 
 @app.route("/story-store/book/<book_id>")
 def story_book_details(book_id):
     book = get_story_book(book_id)
     if not book:
         abort(404)
+
+    target_id = str(book["id"])
+    recently = session.get("recently_viewed", [])
+    if not isinstance(recently, list):
+        recently = []
+    if target_id in recently:
+        recently.remove(target_id)
+    recently.insert(0, target_id)
+    session["recently_viewed"] = recently[:10]
+    session.modified = True
+
+    # Fetch Recently Viewed Book Objects
+    recently_books = []
+    rec_ids = [b for b in recently if b != target_id][:6]
+    if rec_ids:
+        with db_connection() as conn:
+            ph = ",".join("?" for _ in rec_ids)
+            rows = conn.execute(f"SELECT * FROM products WHERE id IN ({ph})", rec_ids).fetchall()
+            recently_books = [dict(r) for r in rows]
+
+    # Smart Recommendations (Same Genre / Author / Category / Trending)
+    with db_connection() as conn:
+        related_genre = [dict(r) for r in conn.execute("SELECT * FROM products WHERE (genre=? OR category=?) AND id!=? LIMIT 4", (book.get("genre", "Fiction"), book.get("category", "Novel"), book["id"])).fetchall()]
+        if not related_genre:
+            related_genre = [dict(r) for r in conn.execute("SELECT * FROM products WHERE id!=? LIMIT 4", (book["id"],)).fetchall()]
+        related_author = [dict(r) for r in conn.execute("SELECT * FROM products WHERE author=? AND id!=? LIMIT 4", (book.get("author", "Ken Follett"), book["id"])).fetchall()]
+        trending_books = [dict(r) for r in conn.execute("SELECT * FROM products WHERE is_trending=1 AND id!=? LIMIT 4", (book["id"],)).fetchall()]
+
     cart_items, _ = get_cart_items()
     cart_count = sum(item["quantity"] for item in cart_items)
-    return render_template("story_book_details.html", book=book, cart_count=cart_count)
+    wishlist_ids = get_wishlist_ids()
+
+    return render_template(
+        "story_book_details.html",
+        book=book,
+        cart_count=cart_count,
+        wishlist_count=len(wishlist_ids),
+        wishlist_ids=wishlist_ids,
+        recently_books=recently_books,
+        related_genre=related_genre,
+        related_author=related_author,
+        trending_books=trending_books
+    )
+
+@app.route("/story-store/buy-now/<book_id>", methods=["POST"])
+def story_buy_now(book_id):
+    book = get_story_book(book_id)
+    if not book:
+        flash("Book not found.", "error")
+        return redirect(url_for("story_books"))
+    
+    qty = 1
+    try:
+        qty = max(1, int(request.form.get("quantity", 1)))
+    except ValueError:
+        pass
+
+    session["pending_story_order"] = {
+        "customer_name": session.get("customer_name", "Valued Customer"),
+        "email": session.get("email", "customer@example.com"),
+        "phone": "9876543210",
+        "address": "Coimbatore, Tamil Nadu",
+        "items": f"{book['name']} x {qty}",
+        "total": book["price"] * qty
+    }
+    return redirect(url_for("story_checkout"))
+
+@app.route("/story-store/wishlist")
+def story_wishlist():
+    wishlist_ids = get_wishlist_ids()
+    books = []
+    if wishlist_ids:
+        with db_connection() as conn:
+            ph = ",".join("?" for _ in wishlist_ids)
+            rows = conn.execute(f"SELECT * FROM products WHERE id IN ({ph})", list(wishlist_ids)).fetchall()
+            books = [dict(r) for r in rows]
+
+    cart_items, _ = get_cart_items()
+    cart_count = sum(item["quantity"] for item in cart_items)
+    return render_template("story_wishlist.html", books=books, cart_count=cart_count, wishlist_count=len(wishlist_ids))
+
+@app.route("/story-store/wishlist/toggle/<book_id>", methods=["POST"])
+def story_wishlist_toggle(book_id):
+    cust_id = session.get("customer_id")
+    in_wishlist = False
+
+    if cust_id:
+        with db_connection() as conn:
+            exists = conn.execute("SELECT id FROM wishlist WHERE customer_id=? AND book_id=?", (cust_id, book_id)).fetchone()
+            if exists:
+                conn.execute("DELETE FROM wishlist WHERE customer_id=? AND book_id=?", (cust_id, book_id))
+                in_wishlist = False
+            else:
+                conn.execute("INSERT OR IGNORE INTO wishlist (customer_id, book_id) VALUES (?, ?)", (cust_id, book_id))
+                in_wishlist = True
+    else:
+        wishlist = set(session.get("wishlist", []))
+        if book_id in wishlist:
+            wishlist.remove(book_id)
+            in_wishlist = False
+        else:
+            wishlist.add(book_id)
+            in_wishlist = True
+        session["wishlist"] = list(wishlist)
+        session.modified = True
+
+    count = get_wishlist_count()
+    return jsonify({"in_wishlist": in_wishlist, "wishlist_count": count})
+
+@app.route("/story-store/wishlist/move-to-cart/<book_id>", methods=["POST"])
+def story_wishlist_move_to_cart(book_id):
+    book = get_story_book(book_id)
+    if book:
+        cart = session.get("cart", {})
+        if not isinstance(cart, dict): cart = {}
+        key = str(book["id"])
+        cart[key] = {
+            "name": book["name"],
+            "category": book["category"],
+            "price": book["price"],
+            "image": book["image"],
+            "quantity": cart.get(key, {}).get("quantity", 0) + 1
+        }
+        session["cart"] = cart
+        session.modified = True
+
+        cust_id = session.get("customer_id")
+        if cust_id:
+            with db_connection() as conn:
+                conn.execute("DELETE FROM wishlist WHERE customer_id=? AND book_id=?", (cust_id, book_id))
+        else:
+            wishlist = set(session.get("wishlist", []))
+            if book_id in wishlist:
+                wishlist.remove(book_id)
+                session["wishlist"] = list(wishlist)
+                session.modified = True
+
+        flash(f"Moved '{book['name']}' to your shopping cart.", "success")
+    return redirect(url_for("story_cart"))
 
 @app.route("/story-store/cart")
 def story_cart():

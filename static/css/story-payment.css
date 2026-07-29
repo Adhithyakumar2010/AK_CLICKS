@@ -209,6 +209,159 @@
     color: var(--text-color-light);
 }
 
+/* Real Bank Card Preview Container */
+.card-preview-wrapper {
+    background: linear-gradient(135deg, #2c2520 0%, #1d1b18 55%, #52291d 100%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    color: #ffffff;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+    position: relative;
+    overflow: hidden;
+}
+
+.card-preview-wrapper::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 250px;
+    height: 250px;
+    background: radial-gradient(circle, rgba(255, 72, 32, 0.15) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.card-preview-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+}
+
+.card-chip {
+    width: 42px;
+    height: 30px;
+    background: linear-gradient(135deg, #d4af37 0%, #f3e5ab 100%);
+    border-radius: 5px;
+    position: relative;
+    border: 1px solid #b89628;
+}
+
+.card-brand-logo {
+    font-weight: var(--font-black);
+    font-size: 1rem;
+    color: var(--first-color);
+    letter-spacing: 1px;
+}
+
+.card-preview-number {
+    font-family: monospace, var(--body-font);
+    font-size: 1.35rem;
+    letter-spacing: 3px;
+    margin-bottom: 1.25rem;
+    color: #ffffff;
+}
+
+.card-preview-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+
+.card-preview-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 1px;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.card-preview-val {
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Card Brand Selector Logos */
+.card-logos-row {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.brand-badge {
+    padding: 0.35rem 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-color-light);
+    transition: all 0.25s;
+}
+
+.brand-badge.active {
+    background: rgba(255, 72, 32, 0.2);
+    border-color: var(--first-color);
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(255, 72, 32, 0.3);
+}
+
+/* Inline Input Validation Feedback */
+.input-feedback {
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+    min-height: 18px;
+    display: block;
+    font-weight: 500;
+}
+
+.input-feedback.valid {
+    color: #2ecc71;
+}
+
+.input-feedback.invalid {
+    color: #e74c3c;
+}
+
+/* Disabled Pay Button Styling */
+button.button:disabled, button.button[disabled] {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: rgba(255, 255, 255, 0.3) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: none !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+/* Security Badges Below Form */
+.card-security-badges {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    padding: 0.75rem 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.card-security-badges span {
+    font-size: 0.75rem;
+    color: var(--text-color-light);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
 .badge-item span {
     font-size: 1.25rem;
 }

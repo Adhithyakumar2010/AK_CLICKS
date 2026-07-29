@@ -179,55 +179,139 @@
                         <!-- TAB 3: Credit Card -->
                         <div class="payment-panel-content" id="panel-credit">
                             <div style="background:rgba(0,0,0,0.3); border:1px solid var(--card-border); border-radius:.75rem; padding:1.5rem; margin-bottom:1.5rem;">
-                                <h3 style="font-size:var(--h3-font-size); margin-bottom:1rem; color:var(--title-color);">Credit Card Details</h3>
-                                <div style="display:flex; gap:.5rem; margin-bottom:1rem; font-size:var(--smaller-font-size); color:var(--text-color-light);">
-                                    <span>💳 Visa</span> &bull; <span>Mastercard</span> &bull; <span>RuPay</span> &bull; <span>Amex</span>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                                    <h3 style="font-size:var(--h3-font-size); color:var(--title-color); margin:0;">Credit Card Payment</h3>
+                                    <!-- Card Logos on Right Side -->
+                                    <div class="card-logos-row" style="margin:0;">
+                                        <span class="brand-badge" id="cc-brand-visa">Visa</span>
+                                        <span class="brand-badge" id="cc-brand-mc">Mastercard</span>
+                                        <span class="brand-badge" id="cc-brand-rupay">RuPay</span>
+                                        <span class="brand-badge" id="cc-brand-amex">Amex</span>
+                                    </div>
                                 </div>
+
+                                <!-- Realistic Bank Card Preview -->
+                                <div class="card-preview-wrapper" id="cc-preview-card">
+                                    <div class="card-preview-top">
+                                        <div class="card-chip"></div>
+                                        <div class="card-brand-logo" id="cc-preview-logo">AK STORY STORE</div>
+                                    </div>
+                                    <div class="card-preview-number" id="cc-preview-num">•••• •••• •••• ••••</div>
+                                    <div class="card-preview-bottom">
+                                        <div>
+                                            <span class="card-preview-label">Card Holder</span>
+                                            <div class="card-preview-val" id="cc-preview-name">JOHN SMITH</div>
+                                        </div>
+                                        <div>
+                                            <span class="card-preview-label">Expires</span>
+                                            <div class="card-preview-val" id="cc-preview-exp">MM/YY</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Form Fields with Placeholders & Inline Feedback -->
                                 <div class="checkout-form">
                                     <label>Card Holder Name
-                                        <input type="text" id="cc_name" placeholder="Name on Credit Card">
+                                        <input type="text" id="cc_name" placeholder="John Smith" oninput="validateCardInputs('cc')">
+                                        <span class="input-feedback" id="cc_name_fb"></span>
                                     </label>
                                     <label>Card Number
-                                        <input type="text" id="cc_number" placeholder="0000 0000 0000 0000" maxlength="19">
+                                        <input type="text" id="cc_number" placeholder="XXXX XXXX XXXX XXXX" maxlength="19" oninput="formatCardNum(this); validateCardInputs('cc');">
+                                        <span class="input-feedback" id="cc_number_fb"></span>
                                     </label>
                                     <div class="form-group-row">
-                                        <label>Expiry Date
-                                            <input type="text" id="cc_exp" placeholder="MM / YY" maxlength="5">
+                                        <label>Expiry Month
+                                            <input type="text" id="cc_exp_m" placeholder="MM" maxlength="2" oninput="validateCardInputs('cc')">
+                                            <span class="input-feedback" id="cc_exp_m_fb"></span>
+                                        </label>
+                                        <label>Expiry Year
+                                            <input type="text" id="cc_exp_y" placeholder="YY" maxlength="2" oninput="validateCardInputs('cc')">
+                                            <span class="input-feedback" id="cc_exp_y_fb"></span>
                                         </label>
                                         <label>CVV
-                                            <input type="password" id="cc_cvv" placeholder="123" maxlength="4">
+                                            <input type="password" id="cc_cvv" placeholder="•••" maxlength="4" oninput="validateCardInputs('cc')">
+                                            <span class="input-feedback" id="cc_cvv_fb"></span>
                                         </label>
                                     </div>
                                 </div>
+
+                                <!-- Small Security Badges Below Form -->
+                                <div class="card-security-badges">
+                                    <span>🔒 256-bit SSL Encrypted</span>
+                                    <span>🛡 PCI DSS Compliant</span>
+                                    <span>✅ Secure Card Processing</span>
+                                </div>
                             </div>
-                            <button type="submit" onclick="return validateCardForm('cc');" class="button" style="width:100%; font-size:1.1rem; padding:1rem;">Pay ₹{{ amount }} via Credit Card &rarr;</button>
+                            <button type="submit" id="cc_pay_btn" class="button" style="width:100%; font-size:1.1rem; padding:1rem;" disabled>Pay ₹{{ amount }} via Credit Card &rarr;</button>
                         </div>
 
                         <!-- TAB 4: Debit Card -->
                         <div class="payment-panel-content" id="panel-debit">
                             <div style="background:rgba(0,0,0,0.3); border:1px solid var(--card-border); border-radius:.75rem; padding:1.5rem; margin-bottom:1.5rem;">
-                                <h3 style="font-size:var(--h3-font-size); margin-bottom:1rem; color:var(--title-color);">Debit Card Payment</h3>
-                                <div style="display:flex; gap:.5rem; margin-bottom:1rem; font-size:var(--smaller-font-size); color:var(--text-color-light);">
-                                    <span>💳 Visa</span> &bull; <span>Mastercard</span> &bull; <span>RuPay Debit</span>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                                    <h3 style="font-size:var(--h3-font-size); color:var(--title-color); margin:0;">Debit Card Payment</h3>
+                                    <!-- Card Logos on Right Side -->
+                                    <div class="card-logos-row" style="margin:0;">
+                                        <span class="brand-badge" id="dc-brand-visa">Visa</span>
+                                        <span class="brand-badge" id="dc-brand-mc">Mastercard</span>
+                                        <span class="brand-badge" id="dc-brand-rupay">RuPay</span>
+                                        <span class="brand-badge" id="dc-brand-amex">Amex</span>
+                                    </div>
                                 </div>
+
+                                <!-- Realistic Bank Card Preview -->
+                                <div class="card-preview-wrapper" id="dc-preview-card">
+                                    <div class="card-preview-top">
+                                        <div class="card-chip"></div>
+                                        <div class="card-brand-logo" id="dc-preview-logo">AK STORY STORE</div>
+                                    </div>
+                                    <div class="card-preview-number" id="dc-preview-num">•••• •••• •••• ••••</div>
+                                    <div class="card-preview-bottom">
+                                        <div>
+                                            <span class="card-preview-label">Card Holder</span>
+                                            <div class="card-preview-val" id="dc-preview-name">JOHN SMITH</div>
+                                        </div>
+                                        <div>
+                                            <span class="card-preview-label">Expires</span>
+                                            <div class="card-preview-val" id="dc-preview-exp">MM/YY</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Form Fields with Placeholders & Inline Feedback -->
                                 <div class="checkout-form">
                                     <label>Card Holder Name
-                                        <input type="text" id="dc_name" placeholder="Name on Debit Card">
+                                        <input type="text" id="dc_name" placeholder="John Smith" oninput="validateCardInputs('dc')">
+                                        <span class="input-feedback" id="dc_name_fb"></span>
                                     </label>
                                     <label>Card Number
-                                        <input type="text" id="dc_number" placeholder="0000 0000 0000 0000" maxlength="19">
+                                        <input type="text" id="dc_number" placeholder="XXXX XXXX XXXX XXXX" maxlength="19" oninput="formatCardNum(this); validateCardInputs('dc');">
+                                        <span class="input-feedback" id="dc_number_fb"></span>
                                     </label>
                                     <div class="form-group-row">
-                                        <label>Expiry Date
-                                            <input type="text" id="dc_exp" placeholder="MM / YY" maxlength="5">
+                                        <label>Expiry Month
+                                            <input type="text" id="dc_exp_m" placeholder="MM" maxlength="2" oninput="validateCardInputs('dc')">
+                                            <span class="input-feedback" id="dc_exp_m_fb"></span>
+                                        </label>
+                                        <label>Expiry Year
+                                            <input type="text" id="dc_exp_y" placeholder="YY" maxlength="2" oninput="validateCardInputs('dc')">
+                                            <span class="input-feedback" id="dc_exp_y_fb"></span>
                                         </label>
                                         <label>CVV
-                                            <input type="password" id="dc_cvv" placeholder="123" maxlength="4">
+                                            <input type="password" id="dc_cvv" placeholder="•••" maxlength="4" oninput="validateCardInputs('dc')">
+                                            <span class="input-feedback" id="dc_cvv_fb"></span>
                                         </label>
                                     </div>
                                 </div>
+
+                                <!-- Small Security Badges Below Form -->
+                                <div class="card-security-badges">
+                                    <span>🔒 256-bit SSL Encrypted</span>
+                                    <span>🛡 PCI DSS Compliant</span>
+                                    <span>✅ Secure Card Processing</span>
+                                </div>
                             </div>
-                            <button type="submit" onclick="return validateCardForm('dc');" class="button" style="width:100%; font-size:1.1rem; padding:1rem;">Pay ₹{{ amount }} via Debit Card &rarr;</button>
+                            <button type="submit" id="dc_pay_btn" class="button" style="width:100%; font-size:1.1rem; padding:1rem;" disabled>Pay ₹{{ amount }} via Debit Card &rarr;</button>
                         </div>
 
                         <!-- TAB 5: Net Banking -->
@@ -316,30 +400,141 @@
             });
         });
 
-        // Form Validation for Credit/Debit Cards
-        function validateCardForm(prefix) {
-            const name = document.getElementById(prefix + '_name').value.trim();
-            const number = document.getElementById(prefix + '_number').value.replace(/\s+/g, '');
-            const exp = document.getElementById(prefix + '_exp').value.trim();
-            const cvv = document.getElementById(prefix + '_cvv').value.trim();
+        // Format Card Number (auto space every 4 digits, max 16 digits)
+        function formatCardNum(input) {
+            let v = input.value.replace(/\D/g, '').substring(0, 16);
+            let parts = [];
+            for (let i = 0; i < v.length; i += 4) {
+                parts.push(v.substring(i, i + 4));
+            }
+            input.value = parts.join(' ');
+        }
 
-            if (!name) {
-                alert('Please enter Card Holder Name.');
-                return false;
+        // Live Typing, Brand Detection, & Inline Validation
+        function validateCardInputs(prefix) {
+            const nameElem = document.getElementById(prefix + '_name');
+            const numberElem = document.getElementById(prefix + '_number');
+            const monthElem = document.getElementById(prefix + '_exp_m');
+            const yearElem = document.getElementById(prefix + '_exp_y');
+            const cvvElem = document.getElementById(prefix + '_cvv');
+
+            const nameFb = document.getElementById(prefix + '_name_fb');
+            const numberFb = document.getElementById(prefix + '_number_fb');
+            const monthFb = document.getElementById(prefix + '_exp_m_fb');
+            const yearFb = document.getElementById(prefix + '_exp_y_fb');
+            const cvvFb = document.getElementById(prefix + '_cvv_fb');
+            const payBtn = document.getElementById(prefix + '_pay_btn');
+
+            // Clean Values
+            let rawName = nameElem.value.replace(/[^a-zA-Z\s]/g, '');
+            if (nameElem.value !== rawName) { nameElem.value = rawName; }
+
+            let rawNum = numberElem.value.replace(/\s+/g, '');
+            let rawMonth = monthElem.value.replace(/\D/g, '').substring(0, 2);
+            monthElem.value = rawMonth;
+            let rawYear = yearElem.value.replace(/\D/g, '').substring(0, 2);
+            yearElem.value = rawYear;
+            let rawCvv = cvvElem.value.replace(/\D/g, '');
+
+            // Update Card Preview Live
+            const previewName = document.getElementById(prefix + '-preview-name');
+            const previewNum = document.getElementById(prefix + '-preview-num');
+            const previewExp = document.getElementById(prefix + '-preview-exp');
+            const previewLogo = document.getElementById(prefix + '-preview-logo');
+
+            previewName.textContent = rawName ? rawName.toUpperCase() : 'JOHN SMITH';
+            previewNum.textContent = numberElem.value ? numberElem.value : '•••• •••• •••• ••••';
+            previewExp.textContent = (rawMonth || rawYear) ? `${rawMonth || 'MM'}/${rawYear || 'YY'}` : 'MM/YY';
+
+            // Auto Brand Detection
+            let brand = 'VISA / MC / RUPAY';
+            document.querySelectorAll(`#${prefix}-brand-visa, #${prefix}-brand-mc, #${prefix}-brand-rupay, #${prefix}-brand-amex`).forEach(b => b.classList.remove('active'));
+
+            if (rawNum.startsWith('4')) {
+                brand = 'VISA';
+                document.getElementById(prefix + '-brand-visa').classList.add('active');
+            } else if (/^(5[1-5]|222[1-9]|22[3-9]|2[3-6]|27[0-1]|2720)/.test(rawNum)) {
+                brand = 'MASTERCARD';
+                document.getElementById(prefix + '-brand-mc').classList.add('active');
+            } else if (/^(34|37)/.test(rawNum)) {
+                brand = 'AMERICAN EXPRESS';
+                document.getElementById(prefix + '-brand-amex').classList.add('active');
+            } else if (/^(60|65|81|82)/.test(rawNum)) {
+                brand = 'RUPAY';
+                document.getElementById(prefix + '-brand-rupay').classList.add('active');
             }
-            if (!number || number.length < 13 || isNaN(number)) {
-                alert('Please enter a valid Card Number (13-19 digits).');
-                return false;
+            previewLogo.textContent = brand;
+
+            // Validate Fields
+            let isNameValid = false;
+            if (rawName.trim().length >= 3) {
+                isNameValid = true;
+                setFeedback(nameFb, '✓ Valid Cardholder Name', true);
+            } else if (rawName.length > 0) {
+                setFeedback(nameFb, 'Full name required (min 3 letters)', false);
+            } else {
+                setFeedback(nameFb, '', true);
             }
-            if (!exp || !exp.includes('/')) {
-                alert('Please enter Expiry Date in MM/YY format.');
-                return false;
+
+            let isNumberValid = false;
+            if (rawNum.length === 16) {
+                isNumberValid = true;
+                setFeedback(numberFb, `✓ Valid ${brand} Number`, true);
+            } else if (rawNum.length > 0) {
+                setFeedback(numberFb, `Invalid Card Number (must be 16 digits, current: ${rawNum.length})`, false);
+            } else {
+                setFeedback(numberFb, '', true);
             }
-            if (!cvv || cvv.length < 3 || isNaN(cvv)) {
-                alert('Please enter a valid 3 or 4-digit CVV.');
-                return false;
+
+            let isMonthValid = false;
+            let mVal = parseInt(rawMonth, 10);
+            if (rawMonth.length === 2 && mVal >= 1 && mVal <= 12) {
+                isMonthValid = true;
+                setFeedback(monthFb, '✓ Valid MM', true);
+            } else if (rawMonth.length > 0) {
+                setFeedback(monthFb, 'MM: 01–12', false);
+            } else {
+                setFeedback(monthFb, '', true);
             }
-            return true;
+
+            let isYearValid = false;
+            let yVal = parseInt(rawYear, 10);
+            if (rawYear.length === 2 && yVal >= 26) {
+                isYearValid = true;
+                setFeedback(yearFb, '✓ Valid YY', true);
+            } else if (rawYear.length > 0) {
+                setFeedback(yearFb, 'YY ≥ 26', false);
+            } else {
+                setFeedback(yearFb, '', true);
+            }
+
+            let requiredCvvLen = (brand === 'AMERICAN EXPRESS') ? 4 : 3;
+            if (cvvElem.value.length > requiredCvvLen) {
+                cvvElem.value = cvvElem.value.substring(0, requiredCvvLen);
+                rawCvv = cvvElem.value;
+            }
+
+            let isCvvValid = false;
+            if (rawCvv.length === requiredCvvLen) {
+                isCvvValid = true;
+                setFeedback(cvvFb, '✓ Valid CVV', true);
+            } else if (rawCvv.length > 0) {
+                setFeedback(cvvFb, `CVV must be ${requiredCvvLen} digits`, false);
+            } else {
+                setFeedback(cvvFb, '', true);
+            }
+
+            // Enable Pay Button ONLY when ALL pass
+            if (isNameValid && isNumberValid && isMonthValid && isYearValid && isCvvValid) {
+                payBtn.disabled = false;
+            } else {
+                payBtn.disabled = true;
+            }
+        }
+
+        function setFeedback(elem, text, isValid) {
+            elem.textContent = text;
+            elem.className = 'input-feedback ' + (isValid ? 'valid' : 'invalid');
         }
     </script>
 </body>
