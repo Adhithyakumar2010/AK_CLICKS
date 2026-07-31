@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>500 - Server Error | AK CLICKS & STORY STORE</title>
+    {% if is_story_store %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/story-store.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/story-book.css') }}">
+    {% else %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% endif %}
+    <style>
+        .error-page-container {
+            min-height: 80vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 3rem 1.5rem;
+            background: {% if is_story_store %}#161713{% else %}#0a0a0a{% endif %};
+            color: #ffffff;
+        }
+        .error-card {
+            max-width: 580px;
+            background: {% if is_story_store %}rgba(30, 31, 26, 0.95){% else %}rgba(20, 20, 20, 0.95){% endif %};
+            border: 1px solid {% if is_story_store %}rgba(255, 72, 32, 0.3){% else %}rgba(212, 175, 55, 0.3){% endif %};
+            border-radius: 1.25rem;
+            padding: 3rem 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .error-code {
+            font-size: 5rem;
+            font-weight: 800;
+            margin: 0;
+            color: {% if is_story_store %}#ff4820{% else %}#d4af37{% endif %};
+            line-height: 1;
+        }
+        .error-title {
+            font-size: 1.8rem;
+            margin: 1rem 0 .5rem 0;
+        }
+        .error-desc {
+            color: #aaa;
+            font-size: 1rem;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        .error-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn-action {
+            padding: .75rem 1.5rem;
+            border-radius: .5rem;
+            text-decoration: none;
+            font-weight: 600;
+            transition: transform .2s ease;
+        }
+        .btn-action:hover {
+            transform: translateY(-2px);
+        }
+        .btn-primary {
+            background: {% if is_story_store %}#ff4820{% else %}#d4af37{% endif %};
+            color: {% if is_story_store %}#fff{% else %}#000{% endif %};
+        }
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-page-container">
+        <div class="error-card">
+            <div class="error-code">500</div>
+            <h1 class="error-title">Internal Server Error</h1>
+            <p class="error-desc">An unexpected error occurred on our server. Our team has been notified and is working to resolve it.</p>
+            <div class="error-actions">
+                {% if is_story_store %}
+                <a href="{{ url_for('story_home') }}" class="btn-action btn-primary">Return to Story Store</a>
+                {% else %}
+                <a href="{{ url_for('home') }}" class="btn-action btn-primary">Return to Photography</a>
+                {% endif %}
+                <a href="javascript:location.reload()" class="btn-action btn-secondary">Try Refreshing</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,29 @@
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from app import app, init_db
+
+class TestAnalytics(unittest.TestCase):
+    def setUp(self):
+        app.config['TESTING'] = True
+        app.config['WTF_CSRF_ENABLED'] = False
+        self.client = app.test_client()
+        with app.app_context():
+            init_db()
+
+    def test_01_analytics_and_reports_pages(self):
+        """Test Story Store Admin Analytics & Reports routes"""
+        with self.client.session_transaction() as sess:
+            sess['story_admin'] = True
+
+        res_ana = self.client.get('/story-store/admin/analytics')
+        self.assertEqual(res_ana.status_code, 200)
+
+        res_rep = self.client.get('/story-store/admin/reports')
+        self.assertEqual(res_rep.status_code, 200)
+
+if __name__ == '__main__':
+    unittest.main()

@@ -35,7 +35,47 @@ app.config["MAIL_USE_TLS"] = os.environ.get("MAIL_USE_TLS", "true").lower() in (
 app.config["MAIL_USE_SSL"] = os.environ.get("MAIL_USE_SSL", "false").lower() in ("true", "1", "on")
 app.config["MAIL_USERNAME"] = os.environ.get("MAIL_USERNAME")
 app.config["MAIL_PASSWORD"] = os.environ.get("MAIL_PASSWORD")
-app.config["MAIL_DEFAULT_SENDER"] = os.environ.get("MAIL_DEFAULT_SENDER") or os.environ.get("MAIL_USERNAME") or "noreply@akclicks.com"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=1)
+
+# Password Strength Validator
+def validate_password_strength(password):
+    """
+    Validate password strength:
+    - Minimum 8 characters
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one digit
+    - At least one special character
+    """
+    if not password or len(password) < 8:
+        return False, "Password must be at least 8 characters long."
+    if not re.search(r"[A-Z]", password):
+        return False, "Password must contain at least one uppercase letter."
+    if not re.search(r"[a-z]", password):
+        return False, "Password must contain at least one lowercase letter."
+    if not re.search(r"[0-9]", password):
+        return False, "Password must contain at least one number."
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-\=\+]', password):
+        return False, "Password must contain at least one special character."
+    return True, "Password meets strength requirements."
+
+# Developer-friendly Rate Limiter Store
+RATE_LIMIT_STORE = {}
+
+def is_rate_limited(ip, endpoint, max_requests=30, window_seconds=60):
+    """Check if client IP exceeds max requests within window_seconds."""
+    now = time.time()
+    key = f"{ip}:{endpoint}"
+    timestamps = RATE_LIMIT_STORE.get(key, [])
+    timestamps = [t for t in timestamps if now - t < window_seconds]
+    if len(timestamps) >= max_requests:
+        RATE_LIMIT_STORE[key] = timestamps
+        return True
+    timestamps.append(now)
+    RATE_LIMIT_STORE[key] = timestamps
+    return False
 
 mail = Mail(app)
 
@@ -87,13 +127,41 @@ def favicon_head_markup():
     )
 
 @app.after_request
-def add_favicon_to_html_pages(response):
-    """Keep favicon markup identical across every independently-rendered template."""
+def add_security_headers_and_favicon(response):
+    """Apply security headers and keep favicon markup identical across templates."""
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; "
+        "img-src 'self' data: blob: https:; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
+        "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;"
+    )
+    if request.is_secure:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    
     if response.mimetype == "text/html":
         page = response.get_data(as_text=True)
         if "</head>" in page and "images/favicon.ico" not in page:
             response.set_data(page.replace("</head>", favicon_head_markup() + "</head>", 1))
     return response
+
+@app.errorhandler(404)
+def page_not_found(e):
+    is_story = request.path.startswith("/story-store")
+    return render_template("error_404.html", is_story_store=is_story), 404
+
+@app.errorhandler(403)
+def access_forbidden(e):
+    is_story = request.path.startswith("/story-store")
+    return render_template("error_403.html", is_story_store=is_story), 403
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    is_story = request.path.startswith("/story-store")
+    return render_template("error_500.html", is_story_store=is_story), 500
 
 def add_column_if_missing(conn, table, column, definition):
     if column not in {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}:
