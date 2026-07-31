@@ -123,7 +123,7 @@ button{
 }
 
 .container{
-  max-width: 1150px;
+  max-width: 1280px;
   margin-left: auto;
   margin-right: auto;
   padding-left: 1.5rem;
@@ -151,6 +151,7 @@ button{
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1.5rem;
 }
 
 .nav__logo{
@@ -161,6 +162,9 @@ button{
   font-size: 1.3rem;
   color: var(--title-color);
   letter-spacing: 1px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1;
 }
 
 .nav__logo span{
@@ -170,7 +174,11 @@ button{
 .nav__list{
   display: flex;
   align-items: center;
-  column-gap: 2rem;
+  column-gap: 1.5rem;
+  flex-wrap: nowrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .nav__link{
@@ -179,10 +187,14 @@ button{
   transition: .3s;
   font-size: var(--small-font-size);
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
 
-.nav__link:hover, .nav__link.active{
+.nav__link:hover, .nav__link.active, .nav__link.active-link{
   color: var(--first-color);
 }
 
@@ -197,6 +209,9 @@ button{
   align-items: center;
   column-gap: .5rem;
   transition: .3s;
+  white-space: nowrap;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .nav__cart:hover{

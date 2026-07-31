@@ -9,18 +9,8 @@
 </head>
 <body class="story-store-body">
 
-    <header class="header">
-        <div class="container nav">
-            <a class="nav__logo" href="{{ url_for('story_home') }}">AK <span>STORY STORE</span></a>
-            <ul class="nav__list">
-                <li><a href="{{ url_for('story_home') }}" class="nav__link">Home</a></li>
-                <li><a href="{{ url_for('story_categories') }}" class="nav__link">Categories</a></li>
-                <li><a href="{{ url_for('story_books') }}" class="nav__link active">Books</a></li>
-                <li><a href="{{ url_for('story_wishlist') }}" class="nav__link">❤️ Wishlist (<span class="wishlist-badge-count">{{ wishlist_count|default(0) }}</span>)</a></li>
-                <li><a href="{{ url_for('story_cart') }}" class="nav__cart">🛒 Cart ({{ cart_count|default(0) }})</a></li>
-            </ul>
-        </div>
-    </header>
+    {% set active_page = 'books' %}
+    {% include 'story_header.html' %}
 
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -191,9 +181,7 @@
         </div>
     </main>
 
-    <footer class="footer">
-        <span class="footer__copy">&#169; 2026 AK Story Store. All rights reserved.</span>
-    </footer>
+    {% include 'story_footer.html' %}
 
     <script src="{{ url_for('static', filename='js/story-store.js') }}"></script>
 </body>
