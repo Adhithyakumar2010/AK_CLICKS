@@ -521,23 +521,136 @@ def customer_home():
             (customer["email"],)
         ).fetchall()
 
+        # This is dashboard-only, read-only data.  A customer can see the next
+        # pending or approved session, while completed and declined records are
+        # deliberately excluded from the upcoming-session card.
         upcoming_booking = conn.execute(
             """
             SELECT *
             FROM bookings
             WHERE email = ?
-                AND status = 'Approved'
                 AND booking_date >= ?
-            ORDER BY booking_date ASC
+                AND status NOT IN ('Declined', 'Completed', 'Cancelled')
+            ORDER BY booking_date ASC, id ASC
             LIMIT 1
             """,
             (customer["email"], date.today().isoformat())
-        ).fetchone()        
+        ).fetchone()
 
         unread_notifications = conn.execute(
             "SELECT COUNT(*) FROM notifications WHERE recipient=? AND is_read=0",
             (customer["email"],)
         ).fetchone()[0]
+
+    def activity_time(value):
+        """Make SQLite timestamps useful to the dashboard without altering data."""
+        if not value:
+            return "Date unavailable", "Recently"
+        try:
+            occurred_at = datetime.fromisoformat(str(value))
+            elapsed = max(datetime.now() - occurred_at, timedelta(0))
+            seconds = int(elapsed.total_seconds())
+            if seconds < 60:
+                relative = "Just now"
+            elif seconds < 3600:
+                relative = f"{seconds // 60} min ago"
+            elif seconds < 86400:
+                relative = f"{seconds // 3600} hr ago"
+            elif seconds < 604800:
+                relative = f"{seconds // 86400} days ago"
+            else:
+                relative = occurred_at.strftime("%d %b %Y")
+            return occurred_at.strftime("%d %b %Y, %I:%M %p"), relative
+        except (TypeError, ValueError):
+            return str(value), "Previously"
+
+    def dashboard_value(row, column, default=None):
+        """Read legacy SQLite rows safely when an optional column is absent."""
+        return row[column] if column in row.keys() else default
+
+    # Booking activities are calculated from the existing booking records.  No
+    # new table or status history is required, so all current workflows remain
+    # untouched.
+    booking_timeline = []
+    status_activity = {
+        "Pending": ("Booking awaiting approval", "fa-hourglass-half", "pending"),
+        "Approved": ("Booking approved", "fa-circle-check", "approved"),
+        "Completed": ("Event completed", "fa-camera-retro", "completed"),
+        "Declined": ("Booking declined", "fa-circle-xmark", "declined"),
+        "Cancelled": ("Booking cancelled", "fa-ban", "declined"),
+    }
+    for booking in bookings:
+        created_at = dashboard_value(booking, "created_at")
+        display_time, relative_time = activity_time(created_at)
+        service = booking["service"] or "Photography booking"
+        booking_timeline.append({
+            "title": "Booking created",
+            "detail": service,
+            "timestamp": display_time,
+            "relative_time": relative_time,
+            "icon": "fa-calendar-plus",
+            "tone": "created",
+            "sort_time": str(created_at or ""),
+        })
+        payment_status = (dashboard_value(booking, "payment_status", "") or "").lower()
+        if payment_status and payment_status != "unpaid":
+            payment_title = "Payment completed" if payment_status == "paid" else "Payment submitted"
+            booking_timeline.append({
+                "title": payment_title,
+                "detail": service,
+                "timestamp": display_time,
+                "relative_time": relative_time,
+                "icon": "fa-credit-card",
+                "tone": "paid",
+                "sort_time": str(created_at or ""),
+            })
+        title, icon, tone = status_activity.get(
+            booking["status"], ("Booking updated", "fa-pen-to-square", "created")
+        )
+        booking_timeline.append({
+            "title": title,
+            "detail": service,
+            "timestamp": display_time,
+            "relative_time": relative_time,
+            "icon": icon,
+            "tone": tone,
+            "sort_time": str(created_at or ""),
+        })
+    booking_timeline.sort(key=lambda item: item["sort_time"], reverse=True)
+
+    # Chart values are derived in memory from the customer's existing rows.
+    # The dashboard only reads data; it does not create or update any record.
+    status_counts = Counter((booking["status"] or "Pending") for booking in bookings)
+    month_keys = []
+    month_labels = []
+    current_year, current_month = date.today().year, date.today().month
+    for offset in range(5, -1, -1):
+        month = current_month - offset
+        year = current_year
+        while month <= 0:
+            month += 12
+            year -= 1
+        month_keys.append(f"{year:04d}-{month:02d}")
+        month_labels.append(date(year, month, 1).strftime("%b"))
+
+    dashboard_charts = {
+        "booking_status": {
+            "labels": list(status_counts.keys()),
+            "values": list(status_counts.values()),
+        },
+        "monthly_bookings": {
+            "labels": month_labels,
+            "values": [sum(str(booking["booking_date"] or "").startswith(key) for booking in bookings) for key in month_keys],
+        },
+        "story_orders": {
+            "labels": month_labels,
+            "values": [sum(str(dashboard_value(order, "created_at", "") or "").startswith(key) for order in orders) for key in month_keys],
+        },
+        "approval_progress": {
+            "labels": ["Approved", "Pending"],
+            "values": [status_counts.get("Approved", 0), status_counts.get("Pending", 0)],
+        },
+    }
 
     return render_template(
         "customer_home.html",
@@ -545,7 +658,9 @@ def customer_home():
         orders=orders,
         bookings=bookings,
         unread_notifications=unread_notifications,
-        upcoming_booking=upcoming_booking
+        upcoming_booking=upcoming_booking,
+        booking_timeline=booking_timeline[:8],
+        dashboard_charts=dashboard_charts,
     )
 
 @app.route("/customer/profile")

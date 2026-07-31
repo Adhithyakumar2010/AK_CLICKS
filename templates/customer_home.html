@@ -1,19 +1,128 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard | AK CLICKS</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/customer_dashboard.css') }}">
 </head>
 <body class="customer-app">
-  <aside class="customer-sidebar"><a class="customer-logo" href="{{ url_for('customer_home') }}">AK <span>CLICKS</span></a><nav class="customer-nav"><a class="active" href="{{ url_for('customer_home') }}"><i class="fa-solid fa-grid-2"></i>Dashboard</a><a href="{{ url_for('customer_profile') }}"><i class="fa-regular fa-user"></i>My Profile</a><a href="{{ url_for('customer_bookings') }}"><i class="fa-regular fa-calendar-check"></i>My Bookings</a><a href="{{ url_for('customer_orders') }}"><i class="fa-solid fa-bag-shopping"></i>My Orders</a><a href="{{ url_for('booking_calendar') }}"><i class="fa-regular fa-calendar"></i>Booking Calendar</a><a href="{{ url_for('customer_notifications') }}"><i class="fa-regular fa-bell"></i>Notifications{% if unread_notifications %}<b>{{ unread_notifications }}</b>{% endif %}</a><a href="{{ url_for('change_password') }}"><i class="fa-solid fa-key"></i>Change Password</a></nav><a class="customer-logout" href="{{ url_for('customer_logout') }}"><i class="fa-solid fa-arrow-right-from-bracket"></i>Logout</a></aside>
-  <main class="customer-main"><header class="customer-topbar"><button class="sidebar-toggle" type="button" aria-label="Open menu"><i class="fa-solid fa-bars"></i></button><div><p class="customer-kicker">Your AK CLICKS account</p><h1>Dashboard</h1></div><a class="topbar-profile" href="{{ url_for('customer_profile') }}"><span>{{ customer.name[:1]|upper }}</span><div><strong>{{ customer.name }}</strong><small>Customer account</small></div></a></header>
-    <section class="dashboard-welcome"><div><p class="customer-kicker">Welcome back</p><h2>Your stories, all in one place.</h2><p>Review your photography bookings and Story Shop orders, then return whenever you need an update.</p></div><div class="welcome-actions"><a class="customer-button primary" href="{{ url_for('home') }}#booking"><i class="fa-solid fa-plus"></i>Plan an event</a><a class="customer-button light" href="{{ url_for('home') }}"><i class="fa-solid fa-globe"></i>Return to Home</a></div></section>
-    <section class="stat-grid"><article class="stat-card"><span class="stat-icon clay"><i class="fa-regular fa-calendar-check"></i></span><div><small>Total bookings</small><strong>{{ bookings|length }}</strong></div></article><article class="stat-card"><span class="stat-icon gold"><i class="fa-solid fa-bag-shopping"></i></span><div><small>Story Shop orders</small><strong>{{ orders|length }}</strong></div></article><article class="stat-card"><span class="stat-icon blue"><i class="fa-regular fa-bell"></i></span><div><small>Unread updates</small><strong>{{ unread_notifications }}</strong></div></article></section>
-    <!-- Upcoming Booking --><section class="content-card"><div class="card-heading"><div><p class="customer-kicker">Next Session</p><h2>Upcoming Booking</h2></div></div>{% if upcoming_booking %}<div class="compact-item"><span class="list-icon"><i class="fa-solid fa-camera"></i></span><div><strong>{{ upcoming_booking.service }}</strong><small>📅 {{ upcoming_booking.booking_date }}<br>📍 {{ upcoming_booking.location }}</small></div><span class="status-badge status-approved">{{ upcoming_booking.status }}</span></div>{% else %}<div class="empty-state"><i class="fa-regular fa-calendar"></i><p>No upcoming bookings.</p><a href="{{ url_for('home') }}#booking">Book your first event</a></div>{% endif %}</section><!-- Existing Content Grid --><section class="content-grid"><article class="content-card"><div class="card-heading"><div><p class="customer-kicker">Photography</p><h2>Recent bookings</h2></div><a href="{{ url_for('customer_bookings') }}">View all <i class="fa-solid fa-arrow-right"></i></a></div>{% if bookings %}<div class="compact-list">{% for booking in bookings[:3] %}<div class="compact-item"><span class="list-icon"><i class="fa-regular fa-calendar"></i></span><div><strong>{{ booking.service }}</strong><small>{{ booking.booking_date }}</small></div><span class="status-badge status-{{ booking.status|lower|replace(' ', '-') }}">{{ booking.status }}</span></div>{% endfor %}</div>{% else %}<div class="empty-state"><i class="fa-regular fa-calendar"></i><p>No bookings yet.</p><a href="{{ url_for('home') }}#booking">Book your first event</a></div>{% endif %}</article>
-      <article class="content-card"><div class="card-heading"><div><p class="customer-kicker">Story Shop</p><h2>Recent orders</h2></div><a href="{{ url_for('customer_orders') }}">View all <i class="fa-solid fa-arrow-right"></i></a></div>{% if orders %}<div class="compact-list">{% for order in orders[:3] %}<div class="compact-item"><span class="list-icon"><i class="fa-solid fa-book"></i></span><div><strong>{{ order.items }}</strong><small>₹{{ '{:,.0f}'.format(order.total) }}</small></div><span class="status-badge status-{{ order.status|lower|replace(' ', '-') }}">{{ order.status }}</span></div>{% endfor %}</div>{% else %}<div class="empty-state"><i class="fa-solid fa-book-open"></i><p>Your Story Shop is waiting for you.</p><a href="{{ url_for('shop') }}">Browse books</a></div>{% endif %}</article></section>
-  </main><script src="{{ url_for('static', filename='js/customer-dashboard.js') }}"></script>
-</body></html>
+  <aside class="customer-sidebar">
+    <a class="customer-logo" href="{{ url_for('customer_home') }}">AK <span>CLICKS</span></a>
+    <nav class="customer-nav">
+      <a class="active" href="{{ url_for('customer_home') }}"><i class="fa-solid fa-grid-2"></i>Dashboard</a>
+      <a href="{{ url_for('customer_profile') }}"><i class="fa-regular fa-user"></i>My Profile</a>
+      <a href="{{ url_for('customer_bookings') }}"><i class="fa-regular fa-calendar-check"></i>My Bookings</a>
+      <a href="{{ url_for('customer_orders') }}"><i class="fa-solid fa-bag-shopping"></i>My Orders</a>
+      <a href="{{ url_for('booking_calendar') }}"><i class="fa-regular fa-calendar"></i>Booking Calendar</a>
+      <a href="{{ url_for('customer_notifications') }}"><i class="fa-regular fa-bell"></i>Notifications{% if unread_notifications %}<b>{{ unread_notifications }}</b>{% endif %}</a>
+      <a href="{{ url_for('change_password') }}"><i class="fa-solid fa-key"></i>Change Password</a>
+    </nav>
+    <a class="customer-logout" href="{{ url_for('customer_logout') }}"><i class="fa-solid fa-arrow-right-from-bracket"></i>Logout</a>
+  </aside>
+
+  <main class="customer-main">
+    <header class="customer-topbar">
+      <button class="sidebar-toggle" type="button" aria-label="Open menu"><i class="fa-solid fa-bars"></i></button>
+      <div>
+        <p class="customer-kicker">Your AK CLICKS account</p>
+        <h1>Dashboard</h1>
+      </div>
+      <a class="topbar-profile" href="{{ url_for('customer_profile') }}">
+        <span>{{ customer.name[:1]|upper }}</span>
+        <div><strong>{{ customer.name }}</strong><small>Customer account</small></div>
+      </a>
+    </header>
+
+    <section class="dashboard-welcome">
+      <div>
+        <p class="customer-kicker">Welcome back</p>
+        <h2>Your stories, all in one place.</h2>
+        <p>Review your photography bookings and Story Shop orders, then return whenever you need an update.</p>
+      </div>
+      <div class="welcome-actions">
+        <a class="customer-button primary" href="{{ url_for('home') }}#booking"><i class="fa-solid fa-plus"></i>Plan an event</a>
+        <a class="customer-button light" href="{{ url_for('home') }}"><i class="fa-solid fa-globe"></i>Return to Home</a>
+      </div>
+    </section>
+
+    <section class="stat-grid" aria-label="Account summary">
+      <article class="stat-card"><span class="stat-icon clay"><i class="fa-regular fa-calendar-check"></i></span><div><small>Total bookings</small><strong data-counter="{{ bookings|length }}">{{ bookings|length }}</strong></div></article>
+      <article class="stat-card"><span class="stat-icon gold"><i class="fa-solid fa-bag-shopping"></i></span><div><small>Story Shop orders</small><strong data-counter="{{ orders|length }}">{{ orders|length }}</strong></div></article>
+      <article class="stat-card"><span class="stat-icon blue"><i class="fa-regular fa-bell"></i></span><div><small>Unread updates</small><strong data-counter="{{ unread_notifications }}">{{ unread_notifications }}</strong></div></article>
+    </section>
+
+    <section class="dashboard-feature-grid">
+      <article class="content-card upcoming-card">
+        <div class="card-heading">
+          <div><p class="customer-kicker">Next Session</p><h2>Upcoming Booking</h2></div>
+          <i class="fa-solid fa-camera card-heading-icon" aria-hidden="true"></i>
+        </div>
+        {% if upcoming_booking %}
+          <div class="upcoming-service"><span class="list-icon"><i class="fa-solid fa-camera"></i></span><div><strong>{{ upcoming_booking.service }}</strong><small>Your nearest scheduled photography session</small></div></div>
+          <dl class="upcoming-details">
+            <div><dt><i class="fa-regular fa-calendar"></i>Date</dt><dd>{{ upcoming_booking.booking_date }}</dd></div>
+            <div><dt><i class="fa-regular fa-clock"></i>Time</dt><dd>To be confirmed</dd></div>
+            <div><dt><i class="fa-solid fa-location-dot"></i>Location</dt><dd>{{ upcoming_booking.location or 'To be confirmed' }}</dd></div>
+            <div><dt><i class="fa-solid fa-user-camera"></i>Photographer</dt><dd>To be assigned</dd></div>
+          </dl>
+          <div class="upcoming-footer"><span class="status-badge status-{{ upcoming_booking.status|lower|replace(' ', '-') }}">{{ upcoming_booking.status }}</span><a class="table-action" href="{{ url_for('customer_bookings') }}">View booking <i class="fa-solid fa-arrow-right"></i></a></div>
+        {% else %}
+          <div class="empty-state feature-empty"><i class="fa-regular fa-calendar-plus"></i><h3>No upcoming bookings yet.</h3><p>Choose a date for your next photography story.</p><a class="customer-button primary" href="{{ url_for('home') }}#booking">Book Now</a></div>
+        {% endif %}
+      </article>
+
+      <article class="content-card timeline-card">
+        <div class="card-heading"><div><p class="customer-kicker">Latest activity</p><h2>Booking Timeline</h2></div><a href="{{ url_for('customer_bookings') }}">All bookings <i class="fa-solid fa-arrow-right"></i></a></div>
+        {% if booking_timeline %}
+          <ol class="booking-timeline">
+            {% for activity in booking_timeline %}
+              <li class="timeline-item timeline-{{ activity.tone }}">
+                <span class="timeline-marker"><i class="fa-solid {{ activity.icon }}"></i></span>
+                <div class="timeline-copy"><strong>{{ activity.title }}</strong><small>{{ activity.detail }}</small></div>
+                <time datetime="{{ activity.sort_time }}" title="{{ activity.timestamp }}">{{ activity.relative_time }}</time>
+              </li>
+            {% endfor %}
+          </ol>
+        {% else %}
+          <div class="empty-state feature-empty"><i class="fa-solid fa-timeline"></i><h3>Your booking activity will appear here.</h3><p>Start with your first photography session.</p><a class="customer-button secondary" href="{{ url_for('home') }}#booking">Book Your First Session</a></div>
+        {% endif %}
+      </article>
+    </section>
+
+    <section class="dashboard-chart-grid" aria-label="Customer dashboard insights">
+      <article class="content-card chart-card"><div class="card-heading"><div><p class="customer-kicker">Bookings</p><h2>Status distribution</h2></div></div><div class="chart-area" data-chart-shell><div class="chart-skeleton"><span></span><span></span><span></span></div><canvas id="booking-status-chart" aria-label="Booking status distribution chart" role="img"></canvas><p class="chart-empty" hidden>No booking data to display yet.</p></div></article>
+      <article class="content-card chart-card"><div class="card-heading"><div><p class="customer-kicker">Bookings</p><h2>Monthly activity</h2></div></div><div class="chart-area" data-chart-shell><div class="chart-skeleton"><span></span><span></span><span></span></div><canvas id="monthly-bookings-chart" aria-label="Monthly bookings chart" role="img"></canvas><p class="chart-empty" hidden>No monthly bookings to display yet.</p></div></article>
+      <article class="content-card chart-card"><div class="card-heading"><div><p class="customer-kicker">Story Shop</p><h2>Orders over time</h2></div></div><div class="chart-area" data-chart-shell><div class="chart-skeleton"><span></span><span></span><span></span></div><canvas id="story-orders-chart" aria-label="Story Store orders chart" role="img"></canvas><p class="chart-empty" hidden>No Story Shop orders to display yet.</p></div></article>
+      <article class="content-card chart-card"><div class="card-heading"><div><p class="customer-kicker">Bookings</p><h2>Approved vs pending</h2></div></div><div class="chart-area" data-chart-shell><div class="chart-skeleton"><span></span><span></span><span></span></div><canvas id="approval-progress-chart" aria-label="Approved compared with pending bookings chart" role="img"></canvas><p class="chart-empty" hidden>No approved or pending bookings yet.</p></div></article>
+    </section>
+
+    <section class="content-grid">
+      <article class="content-card">
+        <div class="card-heading"><div><p class="customer-kicker">Photography</p><h2>Recent bookings</h2></div><a href="{{ url_for('customer_bookings') }}">View all <i class="fa-solid fa-arrow-right"></i></a></div>
+        {% if bookings %}
+          <div class="compact-list">{% for booking in bookings[:3] %}<div class="compact-item"><span class="list-icon"><i class="fa-regular fa-calendar"></i></span><div><strong>{{ booking.service }}</strong><small>{{ booking.booking_date }}</small></div><span class="status-badge status-{{ booking.status|lower|replace(' ', '-') }}">{{ booking.status }}</span></div>{% endfor %}</div>
+        {% else %}
+          <div class="empty-state"><i class="fa-regular fa-calendar"></i><h3>No bookings yet.</h3><p>Your photography plans will appear here.</p><a class="customer-button secondary" href="{{ url_for('home') }}#booking">Book Your First Session</a></div>
+        {% endif %}
+      </article>
+      <article class="content-card">
+        <div class="card-heading"><div><p class="customer-kicker">Story Shop</p><h2>Recent orders</h2></div><a href="{{ url_for('customer_orders') }}">View all <i class="fa-solid fa-arrow-right"></i></a></div>
+        {% if orders %}
+          <div class="compact-list">{% for order in orders[:3] %}<div class="compact-item"><span class="list-icon"><i class="fa-solid fa-book"></i></span><div><strong>{{ order.items }}</strong><small>&#8377;{{ '{:,.0f}'.format(order.total) }}</small></div><span class="status-badge status-{{ order.status|lower|replace(' ', '-') }}">{{ order.status }}</span></div>{% endfor %}</div>
+        {% else %}
+          <div class="empty-state"><i class="fa-solid fa-book-open"></i><h3>No orders found.</h3><p>Discover stories selected for your shelf.</p><a class="customer-button secondary" href="{{ url_for('shop') }}">Browse Story Store</a></div>
+        {% endif %}
+      </article>
+    </section>
+  </main>
+
+  <script id="customer-dashboard-data" type="application/json">{{ dashboard_charts|tojson }}</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="{{ url_for('static', filename='js/customer-dashboard.js') }}"></script>
+</body>
+</html>
