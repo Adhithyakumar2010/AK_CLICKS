@@ -9,7 +9,7 @@ from app import app, init_db
 
 def run_performance_and_load_tests():
     print("\n=======================================================")
-    print(" PERFORMANCE & SIMULATED LOAD TEST REPORT")
+    print(" PERFORMANCE & SIMULATED LOAD TEST REPORT (PHOTOGRAPHY)")
     print("=======================================================")
     
     app.config['TESTING'] = True
@@ -21,17 +21,17 @@ def run_performance_and_load_tests():
     # 1. Benchmark Page Load Times
     endpoints = [
         ('/', "Photography Home"),
-        ('/story-store', "Story Store Home"),
-        ('/story-store/books', "Story Books Catalog"),
-        ('/story-store/categories', "Story Categories"),
-        ('/story-store/cart', "Story Cart Page"),
+        ('/booking-calendar', "Booking Calendar"),
+        ('/customer/login', "Customer Login"),
+        ('/admin/customers', "Admin Customers"),
+        ('/admin/reports', "Admin Reports"),
     ]
     print("\n [1/2] Page Response Speed Benchmarks:")
     for path, label in endpoints:
         start_t = time.time()
         res = client.get(path)
         elapsed_ms = (time.time() - start_t) * 1000
-        print(f"  * {label:<22} ({path:<24}) -> {res.status_code} OK [{elapsed_ms:.2f} ms]")
+        print(f"  * {label:<22} ({path:<24}) -> {res.status_code} [{elapsed_ms:.2f} ms]")
 
     # 2. Simulated Multi-User Concurrent Load
     print("\n [2/2] Simulated Concurrent User Load Testing:")
@@ -40,7 +40,7 @@ def run_performance_and_load_tests():
         start_t = time.time()
         successes = 0
         for _ in range(num_requests):
-            res = client.get('/story-store')
+            res = client.get('/')
             if res.status_code == 200:
                 successes += 1
         total_sec = time.time() - start_t

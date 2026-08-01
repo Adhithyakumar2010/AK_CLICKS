@@ -63,7 +63,9 @@ class TestSecurity(unittest.TestCase):
     def test_05_xss_content_escaping(self):
         """Verify user inputs in search or reviews are safely escaped"""
         xss_input = "<script>alert('xss')</script>"
-        res = self.client.get(f"/story-store/books?q={xss_input}")
+        with self.client.session_transaction() as sess:
+            sess['admin'] = True
+        res = self.client.get(f"/admin/customers?search={xss_input}")
         self.assertEqual(res.status_code, 200)
         self.assertNotIn("<script>alert('xss')</script>", res.data.decode('utf-8'))
 

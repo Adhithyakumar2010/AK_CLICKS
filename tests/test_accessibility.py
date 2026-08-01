@@ -16,7 +16,7 @@ class TestAccessibility(unittest.TestCase):
 
     def test_01_accessibility_markup_and_alt_tags(self):
         """Verify image alt attributes and semantic HTML tags in templates"""
-        res_home = self.client.get('/story-store')
+        res_home = self.client.get('/')
         data = res_home.data.decode('utf-8')
         self.assertIn("alt=", data)
         self.assertIn("<header", data)

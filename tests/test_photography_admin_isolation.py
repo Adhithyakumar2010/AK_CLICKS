@@ -55,19 +55,27 @@ class TestPhotographyAdminIsolation(unittest.TestCase):
         nav_html = data.split('<div class="main">')[0]
         self.assertNotIn("Story Store", nav_html)
 
-    def test_04_story_store_non_regression(self):
-        """Verify Story Store remains 100% functional and accessible"""
+        with self.client.session_transaction() as sess:
+            sess['customer_id'] = 1
+            sess['customer_name'] = 'Test Client'
+
+        res_cust = self.client.get('/customer')
+        self.assertEqual(res_cust.status_code, 200)
+        cust_data = res_cust.data.decode('utf-8')
+        self.assertNotIn("My Orders", cust_data)
+        self.assertNotIn("Story Shop", cust_data)
+        self.assertNotIn("Recent orders", cust_data)
+
+        res_orders_404 = self.client.get('/customer/orders')
+        self.assertEqual(res_orders_404.status_code, 404)
+
+    def test_04_story_store_disconnected_verify(self):
+        """Verify Story Store endpoints return 404 on Photography project"""
         res_story_home = self.client.get('/story-store')
-        self.assertEqual(res_story_home.status_code, 200)
+        self.assertEqual(res_story_home.status_code, 404)
 
         res_story_books = self.client.get('/story-store/books')
-        self.assertEqual(res_story_books.status_code, 200)
-
-        with self.client.session_transaction() as sess:
-            sess['story_admin'] = True
-
-        res_story_admin = self.client.get('/story-store/admin')
-        self.assertEqual(res_story_admin.status_code, 200)
+        self.assertEqual(res_story_books.status_code, 404)
 
 if __name__ == '__main__':
     unittest.main()

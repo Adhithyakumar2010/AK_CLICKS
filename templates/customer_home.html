@@ -20,6 +20,7 @@
       <a href="{{ url_for('booking_calendar') }}"><i class="fa-regular fa-calendar"></i>Booking Calendar</a>
       <a href="{{ url_for('customer_notifications') }}"><i class="fa-regular fa-bell"></i>Notifications{% if unread_notifications %}<b>{{ unread_notifications }}</b>{% endif %}</a>
       <a href="{{ url_for('change_password') }}"><i class="fa-solid fa-key"></i>Change Password</a>
+      <a href="{{ url_for('home') }}"><i class="fa-solid fa-house"></i>Return to Home</a>
     </nav>
     <a class="customer-logout" href="{{ url_for('customer_logout') }}"><i class="fa-solid fa-arrow-right-from-bracket"></i>Logout</a>
   </aside>
@@ -41,7 +42,7 @@
       <div>
         <p class="customer-kicker">Welcome back</p>
         <h2>Your stories, all in one place.</h2>
-        <p>Review your photography bookings and Story Shop orders, then return whenever you need an update.</p>
+        <p>Review your photography bookings and session schedules, then return whenever you need an update.</p>
       </div>
       <div class="welcome-actions">
         <a class="customer-button primary" href="{{ url_for('home') }}#booking"><i class="fa-solid fa-plus"></i>Plan an event</a>
@@ -96,25 +97,16 @@
     <section class="dashboard-chart-grid" aria-label="Customer dashboard insights">
       <article class="content-card chart-card"><div class="card-heading"><div><p class="customer-kicker">Bookings</p><h2>Status distribution</h2></div></div><div class="chart-area" data-chart-shell><div class="chart-skeleton"><span></span><span></span><span></span></div><canvas id="booking-status-chart" aria-label="Booking status distribution chart" role="img"></canvas><p class="chart-empty" hidden>No booking data to display yet.</p></div></article>
       <article class="content-card chart-card"><div class="card-heading"><div><p class="customer-kicker">Bookings</p><h2>Monthly activity</h2></div></div><div class="chart-area" data-chart-shell><div class="chart-skeleton"><span></span><span></span><span></span></div><canvas id="monthly-bookings-chart" aria-label="Monthly bookings chart" role="img"></canvas><p class="chart-empty" hidden>No monthly bookings to display yet.</p></div></article>
-      <article class="content-card chart-card"><div class="card-heading"><div><p class="customer-kicker">Story Shop</p><h2>Orders over time</h2></div></div><div class="chart-area" data-chart-shell><div class="chart-skeleton"><span></span><span></span><span></span></div><canvas id="story-orders-chart" aria-label="Story Store orders chart" role="img"></canvas><p class="chart-empty" hidden>No Story Shop orders to display yet.</p></div></article>
       <article class="content-card chart-card"><div class="card-heading"><div><p class="customer-kicker">Bookings</p><h2>Approved vs pending</h2></div></div><div class="chart-area" data-chart-shell><div class="chart-skeleton"><span></span><span></span><span></span></div><canvas id="approval-progress-chart" aria-label="Approved compared with pending bookings chart" role="img"></canvas><p class="chart-empty" hidden>No approved or pending bookings yet.</p></div></article>
     </section>
 
-    <section class="content-grid">
+    <section class="content-grid single-column">
       <article class="content-card">
         <div class="card-heading"><div><p class="customer-kicker">Photography</p><h2>Recent bookings</h2></div><a href="{{ url_for('customer_bookings') }}">View all <i class="fa-solid fa-arrow-right"></i></a></div>
         {% if bookings %}
           <div class="compact-list">{% for booking in bookings[:3] %}<div class="compact-item"><span class="list-icon"><i class="fa-regular fa-calendar"></i></span><div><strong>{{ booking.service }}</strong><small>{{ booking.booking_date }}</small></div><span class="status-badge status-{{ booking.status|lower|replace(' ', '-') }}">{{ booking.status }}</span></div>{% endfor %}</div>
         {% else %}
           <div class="empty-state"><i class="fa-regular fa-calendar"></i><h3>No bookings yet.</h3><p>Your photography plans will appear here.</p><a class="customer-button secondary" href="{{ url_for('home') }}#booking">Book Your First Session</a></div>
-        {% endif %}
-      </article>
-      <article class="content-card">
-        <div class="card-heading"><div><p class="customer-kicker">Story Shop</p><h2>Recent orders</h2></div><a href="{{ url_for('customer_orders') }}">View all <i class="fa-solid fa-arrow-right"></i></a></div>
-        {% if orders %}
-          <div class="compact-list">{% for order in orders[:3] %}<div class="compact-item"><span class="list-icon"><i class="fa-solid fa-book"></i></span><div><strong>{{ order.items }}</strong><small>&#8377;{{ '{:,.0f}'.format(order.total) }}</small></div><span class="status-badge status-{{ order.status|lower|replace(' ', '-') }}">{{ order.status }}</span></div>{% endfor %}</div>
-        {% else %}
-          <div class="empty-state"><i class="fa-solid fa-book-open"></i><h3>No orders found.</h3><p>Discover stories selected for your shelf.</p><a class="customer-button secondary" href="{{ url_for('shop') }}">Browse Story Store</a></div>
         {% endif %}
       </article>
     </section>

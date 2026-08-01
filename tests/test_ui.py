@@ -26,7 +26,7 @@ class TestUI(unittest.TestCase):
 
     def test_02_skeleton_shimmer_and_micro_animations(self):
         """Verify CSS contains skeleton shimmer and micro animation classes"""
-        res_css = self.client.get('/static/css/story-store.css')
+        res_css = self.client.get('/static/css/style.css')
         self.assertEqual(res_css.status_code, 200)
         data = res_css.data.decode('utf-8')
         self.assertIn(".skeleton-box", data)
@@ -36,7 +36,7 @@ class TestUI(unittest.TestCase):
 
     def test_03_accessibility_focus_styles(self):
         """Verify WCAG focus indicator styles exist in CSS"""
-        res_css = self.client.get('/static/css/story-store.css')
+        res_css = self.client.get('/static/css/style.css')
         data = res_css.data.decode('utf-8')
         self.assertIn("focus-visible", data)
 

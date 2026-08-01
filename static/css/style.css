@@ -1678,6 +1678,34 @@ tr:hover {
     }
 }
 
+/* UI Utilities & Accessibility */
+:focus-visible {
+    outline: 2px solid #a95d43;
+    outline-offset: 2px;
+}
+.skeleton-box {
+    background: linear-gradient(90deg, #222 25%, #333 50%, #222 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+.hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+    transform: translateY(-4px);
+}
+.fade-in-up {
+    animation: fadeInUp 0.4s ease-out forwards;
+}
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 
 
 
