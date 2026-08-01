@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Management | AK CLICKS Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body class="photo-admin-body">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="logo">AK CLICKS</div>
+        <ul>
+            <li><a href="{{ url_for('admin') }}">🏠 Dashboard</a></li>
+            <li><a href="{{ url_for('admin') }}#bookings">📅 Bookings</a></li>
+            <li><a href="{{ url_for('admin_customers') }}" class="active">👤 Customers</a></li>
+            <li><a href="{{ url_for('admin_reports') }}">📊 Reports</a></li>
+            <li><a href="{{ url_for('admin') }}#notifications">🔔 Notifications</a></li>
+            <li><a href="{{ url_for('home') }}">🌐 Website</a></li>
+            <li><a href="{{ url_for('logout') }}">🚪 Logout</a></li>
+        </ul>
+    </div>
+
+    <!-- Main -->
+    <div class="main">
+        <div class="topbar">
+            <div>
+                <h1>Customer Management</h1>
+                <p style="color: #777; margin-top: 4px;">View and manage all registered clients and lead inquiries</p>
+            </div>
+            <div>
+                <a href="{{ url_for('admin_customers_export') }}" class="photo-admin-btn photo-admin-btn-outline">📥 Export CSV</a>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+        <div style="margin-bottom:20px; padding:12px 18px; border-radius:6px; background:{% if category=='error' %}#ffe0df{% else %}#dff3e5{% endif %}; color:{% if category=='error' %}#8d2b28{% else %}#176733{% endif %}; font-weight:bold;">
+            {{ message }}
+        </div>
+        {% endfor %}
+        {% endwith %}
+
+        <!-- Search Section Card -->
+        <div class="photo-admin-section">
+            <form action="{{ url_for('admin_customers') }}" method="get" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search by name, email, or phone..." class="photo-admin-input" style="flex: 1; max-width: 400px;">
+                <button type="submit" class="photo-admin-btn">Search</button>
+            </form>
+        </div>
+
+        <!-- Customer Table Section -->
+        <div class="photo-admin-section" style="padding: 0; overflow: hidden;">
+            <div class="photo-admin-table-container" style="box-shadow: none;">
+                <table class="photo-admin-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Total Bookings</th>
+                            <th>Amount Paid</th>
+                            <th>Last Booking</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in customers %}
+                        <tr>
+                            <td>#{{ c.id }}</td>
+                            <td><strong>{{ c.name }}</strong></td>
+                            <td>{{ c.email }}</td>
+                            <td>{{ c.phone|default('N/A') }}</td>
+                            <td>{{ c.total_bookings }}</td>
+                            <td>₹{{ "{:,}".format(c.amount_paid) }}</td>
+                            <td>{{ c.last_booking }}</td>
+                            <td>
+                                <span class="photo-admin-badge {% if c.status == 'Active' %}photo-admin-badge-active{% else %}photo-admin-badge-lead{% endif %}">
+                                    {{ c.status }}
+                                </span>
+                            </td>
+                            <td>
+                                <div style="display: flex; gap: 6px; align-items: center;">
+                                    <a href="{{ url_for('admin_customer_details', customer_id=c.id) }}" class="photo-admin-btn-blue" style="text-decoration: none;">👤 View</a>
+                                    <form action="{{ url_for('admin_customer_delete', customer_id=c.id) }}" method="post" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this customer record?');">
+                                        <button type="submit" class="photo-admin-btn-danger">🗑 Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" style="text-align: center; color: #777; padding: 40px;">No customer records found matching your search.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

@@ -184,3 +184,202 @@ grid-template-columns:1fr;
 }
 
 }
+
+/*=============================================================================
+  PHOTOGRAPHY ADMIN UNIFIED DESIGN SYSTEM (.photo-admin-*)
+  Matching the Master Photography Admin Dashboard (/admin)
+=============================================================================*/
+
+/* Body Background & Typography */
+.photo-admin-body {
+    background: #f5f5f5;
+    color: #222222;
+    font-family: 'DM Sans', sans-serif;
+}
+
+/* Page Section & Card Components matching .section / .card */
+.photo-admin-section {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid #eeeeee;
+    padding: 24px;
+    margin-bottom: 30px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+}
+
+.photo-admin-card {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid #eeeeee;
+    padding: 24px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.photo-admin-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.photo-admin-card h3, .photo-admin-card h4 {
+    color: #777777;
+    font-size: 15px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    text-transform: capitalize;
+}
+
+.photo-admin-card h1, .photo-admin-card h2 {
+    color: #1d1b18;
+    font-size: 32px;
+    font-weight: 700;
+    margin: 0;
+}
+
+/* Table Component matching Dashboard table/th/td */
+.photo-admin-table-container {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid #eeeeee;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+}
+
+.photo-admin-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.photo-admin-table th {
+    background: #1d1b18;
+    color: #ffffff;
+    padding: 14px 16px;
+    font-weight: 700;
+    font-size: 14px;
+    text-align: left;
+    border: none;
+}
+
+.photo-admin-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid #eeeeee;
+    color: #333333;
+    font-size: 14px;
+}
+
+.photo-admin-table tbody tr:nth-child(even) {
+    background: #fafafa;
+}
+
+.photo-admin-table tbody tr:hover {
+    background: #f2f2f2;
+    transition: background 0.2s ease;
+}
+
+/* Button System matching Dashboard buttons */
+.photo-admin-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #a95d43;
+    color: #ffffff;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 5px;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.photo-admin-btn:hover {
+    background: #884933;
+    transform: translateY(-1px);
+}
+
+.photo-admin-btn-secondary {
+    background: #1d1b18;
+    color: #ffffff;
+}
+
+.photo-admin-btn-secondary:hover {
+    background: #333333;
+}
+
+.photo-admin-btn-blue {
+    background: #317dba;
+    color: #ffffff;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.photo-admin-btn-blue:hover {
+    background: #256497;
+}
+
+.photo-admin-btn-danger {
+    background: #bf4c49;
+    color: #ffffff;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.photo-admin-btn-danger:hover {
+    background: #a33b38;
+}
+
+.photo-admin-btn-outline {
+    background: #ffffff;
+    border: 1px solid #a95d43;
+    color: #a95d43;
+}
+
+.photo-admin-btn-outline:hover {
+    background: #a95d43;
+    color: #ffffff;
+}
+
+/* Status Badges */
+.photo-admin-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.photo-admin-badge-active {
+    background: #dff3e5;
+    color: #176733;
+    border: 1px solid #61b77a;
+}
+
+.photo-admin-badge-lead {
+    background: #fff1c8;
+    color: #7a5600;
+    border: 1px solid #e4bc3c;
+}
+
+/* Form inputs matching Dashboard */
+.photo-admin-input, .photo-admin-select {
+    padding: 8px 12px;
+    border: 1px solid #cccccc;
+    border-radius: 5px;
+    background: #ffffff;
+    color: #222222;
+    font-size: 14px;
+}
+
+.photo-admin-input:focus, .photo-admin-select:focus {
+    border-color: #a95d43;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(169, 93, 67, 0.2);
+}
+
+
+

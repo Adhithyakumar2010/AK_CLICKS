@@ -17,7 +17,6 @@
       <a class="active" href="{{ url_for('customer_home') }}"><i class="fa-solid fa-grid-2"></i>Dashboard</a>
       <a href="{{ url_for('customer_profile') }}"><i class="fa-regular fa-user"></i>My Profile</a>
       <a href="{{ url_for('customer_bookings') }}"><i class="fa-regular fa-calendar-check"></i>My Bookings</a>
-      <a href="{{ url_for('customer_orders') }}"><i class="fa-solid fa-bag-shopping"></i>My Orders</a>
       <a href="{{ url_for('booking_calendar') }}"><i class="fa-regular fa-calendar"></i>Booking Calendar</a>
       <a href="{{ url_for('customer_notifications') }}"><i class="fa-regular fa-bell"></i>Notifications{% if unread_notifications %}<b>{{ unread_notifications }}</b>{% endif %}</a>
       <a href="{{ url_for('change_password') }}"><i class="fa-solid fa-key"></i>Change Password</a>
@@ -52,7 +51,7 @@
 
     <section class="stat-grid" aria-label="Account summary">
       <article class="stat-card"><span class="stat-icon clay"><i class="fa-regular fa-calendar-check"></i></span><div><small>Total bookings</small><strong data-counter="{{ bookings|length }}">{{ bookings|length }}</strong></div></article>
-      <article class="stat-card"><span class="stat-icon gold"><i class="fa-solid fa-bag-shopping"></i></span><div><small>Story Shop orders</small><strong data-counter="{{ orders|length }}">{{ orders|length }}</strong></div></article>
+      <article class="stat-card"><span class="stat-icon gold"><i class="fa-solid fa-clock"></i></span><div><small>Upcoming sessions</small><strong data-counter="{{ bookings|selectattr('status','equalto','Approved')|list|length }}">{{ bookings|selectattr('status','equalto','Approved')|list|length }}</strong></div></article>
       <article class="stat-card"><span class="stat-icon blue"><i class="fa-regular fa-bell"></i></span><div><small>Unread updates</small><strong data-counter="{{ unread_notifications }}">{{ unread_notifications }}</strong></div></article>
     </section>
 

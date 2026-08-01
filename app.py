@@ -1483,6 +1483,268 @@ def admin():
         notifications=notifications
     )
 
+# ==============================================================================
+# PHOTOGRAPHY ADMIN - CUSTOMER MANAGEMENT & REPORTS MODULES
+# ==============================================================================
+
+@app.route("/admin/customers")
+def admin_customers():
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+
+    search_query = request.args.get("q", "").strip()
+    status_filter = request.args.get("status", "")
+
+    with db_connection() as conn:
+        if search_query:
+            raw_customers = conn.execute(
+                "SELECT * FROM customers WHERE name LIKE ? OR email LIKE ? OR phone LIKE ? ORDER BY id DESC",
+                (f"%{search_query}%", f"%{search_query}%", f"%{search_query}%")
+            ).fetchall()
+        else:
+            raw_customers = conn.execute("SELECT * FROM customers ORDER BY id DESC").fetchall()
+
+        customers = []
+        for c in raw_customers:
+            c_dict = dict(c)
+            email = c_dict.get("email", "")
+
+            # Calculate customer aggregate booking metrics
+            booking_stats = conn.execute("""
+                SELECT 
+                    COUNT(*) as total_bookings,
+                    MAX(booking_date) as last_booking
+                FROM bookings WHERE email=?
+            """, (email,)).fetchone()
+
+            c_dict["total_bookings"] = booking_stats["total_bookings"] if booking_stats else 0
+            c_dict["last_booking"] = booking_stats["last_booking"] if (booking_stats and booking_stats["last_booking"]) else "N/A"
+            c_dict["amount_paid"] = c_dict["total_bookings"] * BOOKING_DEPOSIT
+            c_dict["status"] = "Active" if c_dict["total_bookings"] > 0 else "New Lead"
+
+            if status_filter and c_dict["status"].lower() != status_filter.lower():
+                continue
+            customers.append(c_dict)
+
+    return render_template("admin_customers.html", customers=customers, search_query=search_query)
+
+@app.route("/admin/customer/<int:customer_id>")
+def admin_customer_details(customer_id):
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+
+    with db_connection() as conn:
+        customer = conn.execute("SELECT * FROM customers WHERE id=?", (customer_id,)).fetchone()
+        if not customer:
+            flash("Customer not found.", "error")
+            return redirect(url_for("admin_customers"))
+
+        customer = dict(customer)
+        bookings = [dict(r) for r in conn.execute(
+            "SELECT * FROM bookings WHERE email=? ORDER BY id DESC", (customer["email"],)
+        ).fetchall()]
+
+        total_bookings = len(bookings)
+        approved_bookings = sum(1 for b in bookings if b["status"] == "Approved")
+        completed_bookings = sum(1 for b in bookings if b["status"] == "Completed")
+        total_spent = total_bookings * BOOKING_DEPOSIT
+
+    return render_template(
+        "admin_customer_details.html",
+        customer=customer,
+        bookings=bookings,
+        total_bookings=total_bookings,
+        approved_bookings=approved_bookings,
+        completed_bookings=completed_bookings,
+        total_spent=total_spent
+    )
+
+@app.route("/admin/customer/edit/<int:customer_id>", methods=["GET", "POST"])
+def admin_customer_edit(customer_id):
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+
+    with db_connection() as conn:
+        customer = conn.execute("SELECT * FROM customers WHERE id=?", (customer_id,)).fetchone()
+        if not customer:
+            flash("Customer not found.", "error")
+            return redirect(url_for("admin_customers"))
+
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            email = request.form.get("email", "").strip().lower()
+            phone = request.form.get("phone", "").strip()
+
+            if not name or not email:
+                flash("Name and Email are required.", "error")
+            else:
+                conn.execute("UPDATE customers SET name=?, email=?, phone=? WHERE id=?", (name, email, phone, customer_id))
+                flash("Customer profile updated successfully.", "success")
+                return redirect(url_for("admin_customer_details", customer_id=customer_id))
+
+    return render_template("admin_customer_details.html", customer=dict(customer), bookings=[])
+
+@app.route("/admin/customer/delete/<int:customer_id>", methods=["POST"])
+def admin_customer_delete(customer_id):
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+
+    with db_connection() as conn:
+        conn.execute("DELETE FROM customers WHERE id=?", (customer_id,))
+        flash("Customer record deleted successfully.", "success")
+
+    return redirect(url_for("admin_customers"))
+
+@app.route("/admin/customers/export")
+def admin_customers_export():
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+
+    with db_connection() as conn:
+        customers = conn.execute("SELECT id, name, email, phone, created_at FROM customers ORDER BY id DESC").fetchall()
+
+    output = io.StringIO()
+    output.write("Customer ID,Name,Email,Phone,Joined Date\n")
+    for c in customers:
+        output.write(f'"{c["id"]}","{c["name"]}","{c["email"]}","{c["phone"]}","{c["created_at"]}"\n')
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=photography_customers.csv"}
+    )
+
+@app.route("/admin/reports")
+def admin_reports():
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+
+    range_filter = request.args.get("range", "this_month")
+
+    with db_connection() as conn:
+        total_customers = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+        total_bookings = conn.execute("SELECT COUNT(*) FROM bookings").fetchone()[0]
+        
+        today_str = date.today().isoformat()
+        today_bookings = conn.execute("SELECT COUNT(*) FROM bookings WHERE booking_date=?", (today_str,)).fetchone()[0]
+        
+        monthly_bookings = conn.execute("SELECT COUNT(*) FROM bookings WHERE booking_date >= date('now', 'start of month')").fetchone()[0]
+        completed_bookings = conn.execute("SELECT COUNT(*) FROM bookings WHERE status='Completed'").fetchone()[0]
+        cancelled_bookings = conn.execute("SELECT COUNT(*) FROM bookings WHERE status='Declined' OR status='Cancelled'").fetchone()[0]
+        
+        approved_count = conn.execute("SELECT COUNT(*) FROM bookings WHERE status='Approved'").fetchone()[0]
+        pending_count = conn.execute("SELECT COUNT(*) FROM bookings WHERE status='Pending'").fetchone()[0]
+
+        total_revenue = total_bookings * BOOKING_DEPOSIT
+        pending_payments = pending_count * BOOKING_DEPOSIT
+
+        latest_bookings = [dict(r) for r in conn.execute("SELECT * FROM bookings ORDER BY id DESC LIMIT 10").fetchall()]
+        top_customers = [dict(r) for r in conn.execute(
+            "SELECT c.*, COUNT(b.id) as booking_count FROM customers c LEFT JOIN bookings b ON c.email=b.email GROUP BY c.id ORDER BY booking_count DESC LIMIT 5"
+        ).fetchall()]
+
+        pkg_rows = conn.execute("SELECT service, COUNT(*) as cnt FROM bookings GROUP BY service").fetchall()
+        package_stats = {r["service"]: r["cnt"] for r in pkg_rows}
+
+    return render_template(
+        "admin_reports.html",
+        total_customers=total_customers,
+        total_bookings=total_bookings,
+        today_bookings=today_bookings,
+        monthly_bookings=monthly_bookings,
+        completed_bookings=completed_bookings,
+        cancelled_bookings=cancelled_bookings,
+        approved_count=approved_count,
+        pending_count=pending_count,
+        total_revenue=total_revenue,
+        pending_payments=pending_payments,
+        latest_bookings=latest_bookings,
+        top_customers=top_customers,
+        package_stats=package_stats,
+        range_filter=range_filter
+    )
+
+@app.route("/admin/reports/download/pdf")
+def admin_reports_download_pdf():
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+
+    with db_connection() as conn:
+        total_customers = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+        total_bookings = conn.execute("SELECT COUNT(*) FROM bookings").fetchone()[0]
+        total_revenue = total_bookings * BOOKING_DEPOSIT
+        bookings = conn.execute("SELECT * FROM bookings ORDER BY id DESC LIMIT 20").fetchall()
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    pdf.setTitle("AK CLICKS Photography Business Report")
+
+    # Title Header
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawString(40, 800, "AK CLICKS Studio - Executive Business Report")
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(40, 785, f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Summary Cards
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(40, 750, "Business Summary Metrics:")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(50, 730, f"Total Customers Registered: {total_customers}")
+    pdf.drawString(50, 715, f"Total Photography Bookings: {total_bookings}")
+    pdf.drawString(50, 700, f"Total Revenue Generated: Rs. {total_revenue:,} INR")
+
+    # Bookings Table Header
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(40, 665, "Recent Photography Bookings:")
+    
+    y = 645
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(40, y, "ID")
+    pdf.drawString(70, y, "Customer Name")
+    pdf.drawString(200, y, "Service")
+    pdf.drawString(340, y, "Date")
+    pdf.drawString(440, y, "Status")
+
+    pdf.setFont("Helvetica", 9)
+    for b in bookings:
+        y -= 20
+        if y < 50:
+            pdf.showPage()
+            y = 780
+        pdf.drawString(40, y, str(b["id"]))
+        pdf.drawString(70, y, str(b["name"])[:20])
+        pdf.drawString(200, y, str(b["service"])[:22])
+        pdf.drawString(340, y, str(b["booking_date"]))
+        pdf.drawString(440, y, str(b["status"]))
+
+    pdf.save()
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name="photography_business_report.pdf",
+        mimetype="application/pdf"
+    )
+
+@app.route("/admin/reports/download/excel")
+def admin_reports_download_excel():
+    if not session.get("admin"):
+        return redirect(url_for("login"))
+
+    with db_connection() as conn:
+        bookings = conn.execute("SELECT id, name, email, phone, service, booking_date, location, status FROM bookings ORDER BY id DESC").fetchall()
+
+    output = io.StringIO()
+    output.write("Booking ID,Customer Name,Email,Phone,Service,Booking Date,Location,Status,Deposit Paid\n")
+    for b in bookings:
+        output.write(f'"{b["id"]}","{b["name"]}","{b["email"]}","{b["phone"]}","{b["service"]}","{b["booking_date"]}","{b["location"]}","{b["status"]}","{BOOKING_DEPOSIT}"\n')
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=photography_bookings_report.csv"}
+    )
+
 @app.route("/product/<product_id>/stock",methods=["POST"])
 def update_stock(product_id):
     if not session.get("admin"): return redirect(url_for("login"))

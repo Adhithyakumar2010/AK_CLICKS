@@ -26,23 +26,13 @@
     </div>
 
     <ul>
-
         <li><a href="#dashboard">🏠 Dashboard</a></li>
-
         <li><a href="#bookings">📅 Bookings</a></li>
-
-        <li><a href="#orders">🛒 Orders</a></li>
-
-        <li><a href="#products">📚 Products</a></li>
-
+        <li><a href="{{ url_for('admin_customers') }}">👤 Customers</a></li>
+        <li><a href="{{ url_for('admin_reports') }}">📊 Reports</a></li>
         <li><a href="#notifications">🔔 Notifications</a></li>
-
-        <li><a href="#analytics">📊 Analytics</a></li>
-
         <li><a href="{{ url_for('home') }}">🌐 Website</a></li>
-
         <li><a href="{{ url_for('logout') }}">🚪 Logout</a></li>
-
     </ul>
 
 </div>
