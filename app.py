@@ -28,6 +28,48 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
+# CSRF Protection & State Machine Helpers
+def generate_csrf_token():
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(32)
+    return session["csrf_token"]
+
+def validate_csrf(token):
+    session_token = session.get("csrf_token")
+    if not session_token or not token:
+        return False
+    return hmac.compare_digest(session_token, token)
+
+@app.context_processor
+def inject_csrf_token():
+    return dict(csrf_token=generate_csrf_token())
+
+VALID_STATUS_TRANSITIONS = {
+    "Pending": {"Pending", "Approved", "Declined", "Cancelled"},
+    "Approved": {"Approved", "Completed", "Cancelled"},
+    "Completed": {"Completed"},
+    "Declined": {"Declined"},
+    "Cancelled": {"Cancelled"}
+}
+
+def is_valid_status_transition(current_status, new_status):
+    allowed = VALID_STATUS_TRANSITIONS.get(current_status, {current_status})
+    return new_status in allowed
+
+def validate_booking_date_str(date_str, allow_past=False):
+    if not date_str or not isinstance(date_str, str):
+        return False, "Booking date is required."
+    date_str = date_str.strip()
+    try:
+        parsed_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return False, "Please enter a valid date in YYYY-MM-DD format."
+    
+    if not allow_past and parsed_date < date.today():
+        return False, "Booking date cannot be in the past."
+    return True, parsed_date.isoformat()
+
+
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-before-production")
 app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
 app.config["MAIL_PORT"] = int(os.environ.get("MAIL_PORT", 587))
@@ -113,8 +155,12 @@ PRODUCTS = [
 ]
 
 def db_connection():
-    conn = sqlite3.connect("bookings.db")
+    conn = sqlite3.connect("bookings.db", timeout=20.0)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA foreign_keys = ON;")
+    except Exception:
+        pass
     return conn
 
 def favicon_head_markup():
@@ -173,6 +219,23 @@ def queue_notification(conn, recipient, channel, subject, body):
 def init_db():
     with db_connection() as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,email TEXT NOT NULL,phone TEXT NOT NULL,service TEXT NOT NULL,booking_date TEXT NOT NULL,location TEXT,message TEXT,status TEXT NOT NULL DEFAULT 'Pending',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bookings_date_status ON bookings(booking_date, status);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bookings_email ON bookings(email);")
+        
+        # Verify no active duplicate booking dates exist before creating the unique index
+        dups = conn.execute("""
+            SELECT booking_date FROM bookings 
+            WHERE status NOT IN ('Declined', 'Cancelled') 
+            GROUP BY booking_date HAVING COUNT(*) > 1
+        """).fetchall()
+        if not dups:
+            conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_booking_date 
+                ON bookings(booking_date) 
+                WHERE status NOT IN ('Declined', 'Cancelled');
+            """)
+
         conn.execute("CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT,customer_name TEXT NOT NULL,email TEXT NOT NULL,phone TEXT NOT NULL,address TEXT NOT NULL,items TEXT NOT NULL,total INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'New',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
         conn.execute("CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
         conn.execute("CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY,name TEXT NOT NULL,category TEXT NOT NULL,price INTEGER NOT NULL,image TEXT NOT NULL,description TEXT NOT NULL,stock INTEGER NOT NULL DEFAULT 10)")
@@ -658,7 +721,7 @@ def favicon():
 def availability():
     date = request.args.get("date", "")
     with db_connection() as conn:
-        statuses = [row["status"] for row in conn.execute("SELECT status FROM bookings WHERE booking_date=? AND status != 'Declined'", (date,)).fetchall()]
+        statuses = [row["status"] for row in conn.execute("SELECT status FROM bookings WHERE booking_date=? AND status NOT IN ('Declined', 'Cancelled')", (date,)).fetchall()]
     available = not statuses
     return jsonify({"date": date, "available": available, "statuses": statuses, "message": "Available to book" if available else "This date is currently unavailable."})
 
@@ -684,7 +747,7 @@ def booking_calendar_data():
 
     with db_connection() as conn:
         rows = conn.execute(
-            "SELECT booking_date, status FROM bookings WHERE booking_date >= ? AND booking_date < ? AND status != 'Declined'",
+            "SELECT booking_date, status FROM bookings WHERE booking_date >= ? AND booking_date < ? AND status NOT IN ('Declined', 'Cancelled')",
             (start.isoformat(), end.isoformat()),
         ).fetchall()
 
@@ -723,7 +786,7 @@ def select_booking_date():
         return redirect(url_for("booking_calendar"))
     with db_connection() as conn:
         unavailable = conn.execute(
-            "SELECT 1 FROM bookings WHERE booking_date=? AND status != 'Declined' LIMIT 1",
+            "SELECT 1 FROM bookings WHERE booking_date=? AND status NOT IN ('Declined', 'Cancelled') LIMIT 1",
             (selected_date,),
         ).fetchone()
         if unavailable:
@@ -760,33 +823,163 @@ def pending_booking_payment_qr():
 
 @app.route("/booking/payment/confirm", methods=["POST"])
 def confirm_pending_booking_payment():
+    if not validate_csrf(request.form.get("csrf_token")):
+        flash("Security token validation failed. Please try again.", "error")
+        return redirect(url_for("pending_booking_payment"))
     details = pending_booking()
     method = request.form.get("method")
     if not details or not details.get("booking_date"):
         flash("Your booking session has expired. Please start again.", "error")
         return redirect(url_for("home") + "#booking")
     if method not in {"upi", "netbanking", "card"}:
-        flash("Choose a payment method.", "error")
+        flash("Choose a valid payment method.", "error")
         return redirect(url_for("pending_booking_payment"))
-    with db_connection() as conn:
+        
+    is_valid_date, date_res = validate_booking_date_str(details["booking_date"])
+    if not is_valid_date:
+        flash(date_res, "error")
+        return redirect(url_for("booking_calendar"))
+        
+    service = f"{details['service']} — {details['package']}"
+    message = f"Package: {details['package']}\n{details['message']}".strip()
+    
+    conn = db_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
         unavailable = conn.execute(
-            "SELECT 1 FROM bookings WHERE booking_date=? AND status != 'Declined' LIMIT 1",
-            (details["booking_date"],),
+            "SELECT 1 FROM bookings WHERE booking_date=? AND status NOT IN ('Declined', 'Cancelled') LIMIT 1",
+            (date_res,),
         ).fetchone()
         if unavailable:
+            conn.rollback()
             flash("That date is no longer available. Please choose another date.", "error")
             return redirect(url_for("booking_calendar"))
-        service = f"{details['service']} — {details['package']}"
-        message = f"Package: {details['package']}\n{details['message']}".strip()
+            
         cursor = conn.execute(
-            "INSERT INTO bookings (name,email,phone,service,booking_date,location,message,payment_status,payment_method) VALUES (?,?,?,?,?,?,?,?,?)",
-            (details["name"], details["email"], details["phone"], service, details["booking_date"], details["location"], message, "Payment submitted (test)", method),
+            "INSERT INTO bookings (name,email,phone,service,booking_date,location,message,payment_status,payment_method,status) VALUES (?,?,?,?,?,?,?,?,?,'Pending')",
+            (details["name"], details["email"], details["phone"], service, date_res, details["location"], message, "Payment submitted (test)", method),
         )
         booking_id = cursor.lastrowid
         queue_notification(conn, details["email"], "email", "Booking enquiry received", f"Your {service} enquiry is recorded. Booking reference: {booking_id}.")
         queue_notification(conn, details["email"], "whatsapp", "Payment submitted", f"Payment submission received for booking #{booking_id}. This is test mode.")
+        conn.commit()
+    except (sqlite3.IntegrityError, sqlite3.OperationalError):
+        conn.rollback()
+        flash("That date was concurrently reserved by another customer. Please select another date.", "error")
+        return redirect(url_for("booking_calendar"))
+    finally:
+        conn.close()
+
     session.pop("pending_booking", None)
     return render_template("confirmation.html", kind="booking", record_id=booking_id, paid=True, year=datetime.now().year)
+
+@app.route("/customer/booking/<int:booking_id>/cancel", methods=["POST"])
+def customer_cancel_booking(booking_id):
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+    if not validate_csrf(request.form.get("csrf_token")):
+        flash("Security token validation failed.", "error")
+        return redirect(url_for("customer_bookings"))
+        
+    conn = db_connection()
+    try:
+        customer = conn.execute("SELECT email FROM customers WHERE id=?", (session["customer_id"],)).fetchone()
+        if not customer:
+            flash("Account not found.", "error")
+            return redirect(url_for("account"))
+            
+        booking = conn.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
+        if not booking:
+            flash("Booking record not found.", "error")
+            return redirect(url_for("customer_bookings"))
+            
+        # IDOR Security Check
+        if booking["email"].lower() != customer["email"].lower():
+            flash("Unauthorized attempt to cancel another customer's booking.", "error")
+            return redirect(url_for("customer_bookings")), 403
+            
+        # State Machine Transition Validation
+        if not is_valid_status_transition(booking["status"], "Cancelled") or booking["status"] in {"Completed", "Declined", "Cancelled"}:
+            flash(f"Booking #{booking_id} cannot be cancelled because its current status is '{booking['status']}'.", "error")
+            return redirect(url_for("customer_bookings"))
+            
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("UPDATE bookings SET status='Cancelled' WHERE id=?", (booking_id,))
+        queue_notification(conn, customer["email"], "email", "Booking Cancelled", f"Your booking #{booking_id} for date {booking['booking_date']} has been cancelled.")
+        conn.commit()
+        flash(f"Booking #{booking_id} has been cancelled successfully. The date {booking['booking_date']} is now available.", "success")
+    except Exception:
+        conn.rollback()
+        flash("An error occurred while cancelling your booking.", "error")
+    finally:
+        conn.close()
+        
+    return redirect(url_for("customer_bookings"))
+
+@app.route("/customer/booking/<int:booking_id>/reschedule", methods=["POST"])
+def customer_reschedule_booking(booking_id):
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+    if not validate_csrf(request.form.get("csrf_token")):
+        flash("Security token validation failed.", "error")
+        return redirect(url_for("customer_bookings"))
+        
+    new_date = request.form.get("new_date", "").strip()
+    is_valid_date, err_or_date = validate_booking_date_str(new_date)
+    if not is_valid_date:
+        flash(err_or_date, "error")
+        return redirect(url_for("customer_bookings"))
+        
+    conn = db_connection()
+    try:
+        customer = conn.execute("SELECT email FROM customers WHERE id=?", (session["customer_id"],)).fetchone()
+        if not customer:
+            flash("Account not found.", "error")
+            return redirect(url_for("account"))
+            
+        booking = conn.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
+        if not booking:
+            flash("Booking record not found.", "error")
+            return redirect(url_for("customer_bookings"))
+            
+        # IDOR Security Check
+        if booking["email"].lower() != customer["email"].lower():
+            flash("Unauthorized attempt to modify another customer's booking.", "error")
+            return redirect(url_for("customer_bookings")), 403
+            
+        # State Machine Validation
+        if booking["status"] not in {"Pending", "Approved"}:
+            flash(f"Booking #{booking_id} cannot be rescheduled because its current status is '{booking['status']}'.", "error")
+            return redirect(url_for("customer_bookings"))
+            
+        if booking["booking_date"] == err_or_date:
+            flash("Booking is already scheduled for that date.", "info")
+            return redirect(url_for("customer_bookings"))
+            
+        conn.execute("BEGIN IMMEDIATE")
+        conflict = conn.execute(
+            "SELECT 1 FROM bookings WHERE booking_date=? AND id!=? AND status NOT IN ('Declined', 'Cancelled') LIMIT 1",
+            (err_or_date, booking_id)
+        ).fetchone()
+        if conflict:
+            conn.rollback()
+            flash(f"The date {err_or_date} is already reserved by another customer.", "error")
+            return redirect(url_for("customer_bookings"))
+            
+        conn.execute("UPDATE bookings SET booking_date=? WHERE id=?", (err_or_date, booking_id))
+        queue_notification(conn, customer["email"], "email", "Booking Rescheduled", f"Your booking #{booking_id} has been rescheduled to {err_or_date}.")
+        conn.commit()
+        flash(f"Booking #{booking_id} has been rescheduled to {err_or_date} successfully.", "success")
+    except (sqlite3.IntegrityError, sqlite3.OperationalError):
+        conn.rollback()
+        flash(f"The date {err_or_date} was concurrently reserved by another customer.", "error")
+    except Exception:
+        conn.rollback()
+        flash("An error occurred while rescheduling your booking.", "error")
+    finally:
+        conn.close()
+        
+    return redirect(url_for("customer_bookings"))
 
 @app.route("/shop")
 def shop(): return render_template("shop.html", products=catalog_products(), year=datetime.now().year)
@@ -1044,6 +1237,11 @@ def customer_home():
             (session["customer_id"],)
         ).fetchone()
 
+        if not customer:
+            customer = {"name": session.get("customer_name", "Customer"), "email": session.get("customer_email", "")}
+
+        email = customer["email"]
+
         orders = conn.execute(
             "SELECT * FROM orders WHERE customer_id=? ORDER BY id DESC",
             (session["customer_id"],)
@@ -1051,7 +1249,7 @@ def customer_home():
 
         bookings = conn.execute(
             "SELECT * FROM bookings WHERE email=? ORDER BY id DESC",
-            (customer["email"],)
+            (email,)
         ).fetchall()
 
         # This is dashboard-only, read-only data.  A customer can see the next
@@ -1067,12 +1265,12 @@ def customer_home():
             ORDER BY booking_date ASC, id ASC
             LIMIT 1
             """,
-            (customer["email"], date.today().isoformat())
+            (email, date.today().isoformat())
         ).fetchone()
 
         unread_notifications = conn.execute(
             "SELECT COUNT(*) FROM notifications WHERE recipient=? AND is_read=0",
-            (customer["email"],)
+            (email,)
         ).fetchone()[0]
 
     def activity_time(value):
@@ -1735,13 +1933,25 @@ def update_stock(product_id):
 @app.route("/booking/<int:booking_id>/status",methods=["POST"])
 def update_booking(booking_id):
     if not session.get("admin"): return redirect(url_for("login"))
-    status = request.form.get("status")
-    if status in {"Pending", "Approved", "Declined", "Completed"}:
-        with db_connection() as conn:
-            booking = conn.execute("SELECT email, service FROM bookings WHERE id=?", (booking_id,)).fetchone()
-            conn.execute("UPDATE bookings SET status=? WHERE id=?", (status, booking_id))
-            if booking:
-                queue_notification(conn, booking["email"], "email", "Booking status updated", f"Your {booking['service']} booking #{booking_id} is now {status}.")
+    new_status = request.form.get("status")
+    conn = db_connection()
+    try:
+        booking = conn.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
+        if booking:
+            current_status = booking["status"]
+            if not is_valid_status_transition(current_status, new_status):
+                flash(f"Invalid status transition from '{current_status}' to '{new_status}'.", "error")
+                return redirect(url_for("admin"))
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("UPDATE bookings SET status=? WHERE id=?", (new_status, booking_id))
+            queue_notification(conn, booking["email"], "email", "Booking status updated", f"Your {booking['service']} booking #{booking_id} is now {new_status}.")
+            conn.commit()
+            flash(f"Booking #{booking_id} status updated to {new_status}.", "success")
+    except Exception:
+        conn.rollback()
+        flash("Failed to update booking status.", "error")
+    finally:
+        conn.close()
     return redirect(url_for("admin"))
 
 @app.route("/booking/<int:booking_id>/edit", methods=["POST"])
@@ -1752,28 +1962,44 @@ def edit_booking(booking_id):
     if not all(fields[key] for key in ("name", "email", "phone", "service", "booking_date")):
         flash("Booking details require a name, email, phone, service, and date.", "error")
         return redirect(url_for("admin"))
-    try:
-        datetime.strptime(fields["booking_date"], "%Y-%m-%d")
-    except ValueError:
-        flash("Please enter a valid event date.", "error")
+        
+    is_valid_date, date_res = validate_booking_date_str(fields["booking_date"], allow_past=True)
+    if not is_valid_date:
+        flash(date_res, "error")
         return redirect(url_for("admin"))
-    with db_connection() as conn:
+        
+    conn = db_connection()
+    try:
         booking = conn.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
         if booking is None:
+            conn.close()
             abort(404)
+            
+        conn.execute("BEGIN IMMEDIATE")
         conflict = conn.execute(
-            "SELECT 1 FROM bookings WHERE booking_date=? AND id!=? AND status != 'Declined' LIMIT 1",
-            (fields["booking_date"], booking_id),
+            "SELECT 1 FROM bookings WHERE booking_date=? AND id!=? AND status NOT IN ('Declined', 'Cancelled') LIMIT 1",
+            (date_res, booking_id),
         ).fetchone()
         if conflict:
+            conn.rollback()
             flash("Another active booking already uses that date.", "error")
             return redirect(url_for("admin"))
+            
         conn.execute(
             "UPDATE bookings SET name=?, email=?, phone=?, service=?, booking_date=?, location=?, payment_status=? WHERE id=?",
-            (fields["name"], fields["email"].lower(), fields["phone"], fields["service"], fields["booking_date"], fields["location"], fields["payment_status"], booking_id),
+            (fields["name"], fields["email"].lower(), fields["phone"], fields["service"], date_res, fields["location"], fields["payment_status"], booking_id),
         )
         queue_notification(conn, fields["email"].lower(), "email", "Booking details updated", f"Your {fields['service']} booking #{booking_id} was updated by AK CLICKS.")
-    flash("Booking details updated.", "success")
+        conn.commit()
+        flash("Booking details updated successfully.", "success")
+    except (sqlite3.IntegrityError, sqlite3.OperationalError):
+        conn.rollback()
+        flash("Date conflict error: another active booking occupies that date.", "error")
+    except Exception:
+        conn.rollback()
+        flash("Error updating booking details.", "error")
+    finally:
+        conn.close()
     return redirect(url_for("admin"))
 
 @app.route("/order/<int:order_id>/status",methods=["POST"])
@@ -1790,9 +2016,11 @@ def logout(): session.clear();return redirect(url_for("login"))
 def admin_edit_booking(booking_id):
     if not session.get("admin"):
         return redirect(url_for("login"))
-    with db_connection() as conn:
+    conn = db_connection()
+    try:
         booking = conn.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
         if not booking:
+            conn.close()
             abort(404)
         if request.method == "POST":
             name = request.form.get("name", "").strip()
@@ -1805,12 +2033,38 @@ def admin_edit_booking(booking_id):
             if not all([name, email, phone, service, booking_date, status]):
                 flash("Client Name, Email, Phone, Service, Date, and Status are required.", "error")
                 return render_template("edit_booking.html", booking=booking)
+            
+            is_valid_date, date_res = validate_booking_date_str(booking_date, allow_past=True)
+            if not is_valid_date:
+                flash(date_res, "error")
+                return render_template("edit_booking.html", booking=booking)
+                
+            if not is_valid_status_transition(booking["status"], status):
+                flash(f"Invalid status transition from '{booking['status']}' to '{status}'.", "error")
+                return render_template("edit_booking.html", booking=booking)
+                
+            conn.execute("BEGIN IMMEDIATE")
+            conflict = conn.execute(
+                "SELECT 1 FROM bookings WHERE booking_date=? AND id!=? AND status NOT IN ('Declined', 'Cancelled') LIMIT 1",
+                (date_res, booking_id),
+            ).fetchone()
+            if conflict:
+                conn.rollback()
+                flash("Another active booking already occupies that date.", "error")
+                return render_template("edit_booking.html", booking=booking)
+                
             conn.execute(
                 "UPDATE bookings SET name=?, email=?, phone=?, service=?, booking_date=?, location=?, status=? WHERE id=?",
-                (name, email, phone, service, booking_date, location, status, booking_id)
+                (name, email, phone, service, date_res, location, status, booking_id)
             )
+            conn.commit()
             flash("Booking updated successfully.", "success")
             return redirect(url_for("admin") + "#bookings")
+    except (sqlite3.IntegrityError, sqlite3.OperationalError):
+        conn.rollback()
+        flash("Date conflict error: another active booking occupies that date.", "error")
+    finally:
+        conn.close()
     return render_template("edit_booking.html", booking=booking)
 
 @app.route("/admin/booking/delete/<int:booking_id>", methods=["POST"])
