@@ -75,14 +75,6 @@
 
 <div class="card">
 
-<h3>Total Orders</h3>
-
-<h1>{{ orders|length }}</h1>
-
-</div>
-
-<div class="card">
-
 <h3>Approved Bookings</h3>
 
 <h1>
@@ -90,14 +82,6 @@
 {{ bookings|selectattr('status','equalto','Approved')|list|length }}
 
 </h1>
-
-</div>
-
-<div class="card">
-
-<h3>Products</h3>
-
-<h1>{{ products|length }}</h1>
 
 </div>
 
@@ -200,11 +184,12 @@
 
 <form action="{{ url_for('update_booking', booking_id=booking.id) }}"
 method="post">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
 <select name="status"
 onchange="this.form.submit()">
 
-{% for status in ['Pending','Approved','Completed','Declined'] %}
+{% for status in ['Pending','Approved','Completed','Declined','Cancelled'] %}
 
 <option
 
@@ -232,6 +217,7 @@ selected
   <div style="display:flex; gap:6px; align-items:center;">
     <a href="{{ url_for('admin_edit_booking', booking_id=booking.id) }}" style="background:#317dba; color:white; padding:6px 10px; border-radius:4px; text-decoration:none; font-size:13px; font-weight:bold;">✏️ Edit</a>
     <form action="{{ url_for('admin_delete_booking', booking_id=booking.id) }}" method="post" style="display:inline;" onsubmit="return confirm('Are you sure you want to permanently delete this booking?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="submit" style="background:#bf4c49; color:white; padding:6px 10px; border-radius:4px; border:none; font-size:13px; font-weight:bold; cursor:pointer;">🗑 Delete</button>
     </form>
   </div>
@@ -246,170 +232,6 @@ selected
 <td colspan="6">
 
 No Bookings Found
-
-</td>
-
-</tr>
-
-{% endfor %}
-
-</tbody>
-
-</table>
-
-</div>
-
-<!-- ================= Orders ================= -->
-
-<div class="section" id="orders">
-
-<h2>Story Store Orders</h2>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>Customer</th>
-<th>Items</th>
-<th>Total</th>
-<th>Payment</th>
-<th>Status</th>
-<th>Actions</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-{% for order in orders %}
-
-<tr>
-
-<td>
-
-<strong>{{ order.customer_name }}</strong><br>
-{{ order.email }}
-
-</td>
-
-<td>{{ order.items }}</td>
-
-<td>₹{{ order.total }}</td>
-
-<td>
-
-{{ order.payment_status }}<br>
-<small>{{ order.payment_method or '' }}</small>
-
-</td>
-
-<td>
-
-<form action="{{ url_for('update_order', order_id=order.id) }}" method="post">
-
-<select name="status" onchange="this.form.submit()">
-
-{% for status in ['New','Processing','Fulfilled'] %}
-
-<option {% if order.status==status %}selected{% endif %}>
-
-{{ status }}
-
-</option>
-
-{% endfor %}
-
-</select>
-
-</form>
-
-</td>
-
-<td>
-  <div style="display:flex; gap:6px; align-items:center;">
-    <a href="{{ url_for('admin_edit_order', order_id=order.id) }}" style="background:#317dba; color:white; padding:6px 10px; border-radius:4px; text-decoration:none; font-size:13px; font-weight:bold;">✏️ Edit</a>
-    <form action="{{ url_for('admin_delete_order', order_id=order.id) }}" method="post" style="display:inline;" onsubmit="return confirm('Are you sure you want to permanently delete this order?');">
-      <button type="submit" style="background:#bf4c49; color:white; padding:6px 10px; border-radius:4px; border:none; font-size:13px; font-weight:bold; cursor:pointer;">🗑 Delete</button>
-    </form>
-  </div>
-</td>
-
-</tr>
-
-{% else %}
-
-<tr>
-
-<td colspan="6">
-
-No Orders Found
-
-</td>
-
-</tr>
-
-{% endfor %}
-
-</tbody>
-
-</table>
-
-</div>
-
-<!-- ================= Products ================= -->
-
-<div class="section" id="products">
-
-<h2>Inventory</h2>
-
-<table>
-
-<thead>
-
-<tr>
-
-<th>Book</th>
-<th>Category</th>
-<th>Price</th>
-<th>Stock</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-{% for product in products %}
-
-<tr>
-
-<td>{{ product.name }}</td>
-
-<td>{{ product.category }}</td>
-
-<td>₹{{ product.price }}</td>
-
-<td>
-
-<form action="{{ url_for('update_stock', product_id=product.id) }}" method="post">
-
-<input
-type="number"
-name="stock"
-min="0"
-value="{{ product.stock }}"
-style="width:80px;">
-
-<button>
-
-Save
-
-</button>
-
-</form>
 
 </td>
 
@@ -486,15 +308,10 @@ No Notifications
 
     <h2>Analytics</h2>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;">
+    <div style="max-width: 500px; margin: 0 auto;">
 
         <div>
-            <h3>Order Status</h3>
-            <canvas id="orderChart"></canvas>
-        </div>
-
-        <div>
-            <h3>Booking Status</h3>
+            <h3 style="text-align:center; margin-bottom:15px;">Booking Status</h3>
             <canvas id="bookingChart"></canvas>
         </div>
 
@@ -592,50 +409,28 @@ window.onload = function () {
         return;
     }
 
-    const orderCanvas = document.getElementById("orderChart");
     const bookingCanvas = document.getElementById("bookingChart");
-
-    if (orderCanvas) {
-
-        new Chart(orderCanvas, {
-            type: "pie",
-            data: {
-                labels: ["New", "Processing", "Fulfilled"],
-                datasets: [{
-                    data: [
-                        {{ orders|selectattr('status','equalto','New')|list|length }},
-                        {{ orders|selectattr('status','equalto','Processing')|list|length }},
-                        {{ orders|selectattr('status','equalto','Fulfilled')|list|length }}
-                    ],
-                    backgroundColor: [
-                        "#4CAF50",
-                        "#FFC107",
-                        "#2196F3"
-                    ]
-                }]
-            }
-        });
-
-    }
 
     if (bookingCanvas) {
 
         new Chart(bookingCanvas, {
             type: "doughnut",
             data: {
-                labels: ["Pending", "Approved", "Completed", "Declined"],
+                labels: ["Pending", "Approved", "Completed", "Declined", "Cancelled"],
                 datasets: [{
                     data: [
                         {{ bookings|selectattr('status','equalto','Pending')|list|length }},
                         {{ bookings|selectattr('status','equalto','Approved')|list|length }},
                         {{ bookings|selectattr('status','equalto','Completed')|list|length }},
-                        {{ bookings|selectattr('status','equalto','Declined')|list|length }}
+                        {{ bookings|selectattr('status','equalto','Declined')|list|length }},
+                        {{ bookings|selectattr('status','equalto','Cancelled')|list|length }}
                     ],
                     backgroundColor: [
                         "#FF9800",
                         "#4CAF50",
                         "#2196F3",
-                        "#F44336"
+                        "#F44336",
+                        "#9E9E9E"
                     ]
                 }]
             }

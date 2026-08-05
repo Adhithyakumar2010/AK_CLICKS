@@ -16,13 +16,14 @@
   {% else %}
     <p class="eyebrow">AK CLICKS</p>
     <h1>Your customer account.</h1>
-    <p>Sign in to manage bookings, payments, orders, and notifications.</p>
+    <p>Sign in to manage bookings, payments, and notifications.</p>
     {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<p class="form-message {{ category }}">{{ message }}</p>{% endfor %}{% endwith %}
     <div class="account-switcher" role="tablist" aria-label="Account options" style="display:flex;gap:10px;margin:28px 0 20px;">
       <button type="button" class="button account-tab" data-account-tab="login" role="tab">Login</button>
       <button type="button" class="account-tab" data-account-tab="signup" role="tab" style="padding:11px 18px;border:1px solid var(--ink);background:transparent;color:var(--ink);font:600 14px var(--sans);cursor:pointer;">Sign Up</button>
     </div>
     <form method="post" class="booking-form account-panel" data-account-panel="login" style="text-align:left">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="action" value="login">
       <h2 style="font-family:var(--serif)">Welcome back</h2>
       <label>Email<input type="email" name="email" autocomplete="email" required></label>
@@ -30,6 +31,7 @@
       <button class="button">Login</button>
     </form>
     <form method="post" class="booking-form account-panel" data-account-panel="signup" style="text-align:left" hidden>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="action" value="register">
       <h2 style="font-family:var(--serif)">Create your account</h2>
       <label>Name<input name="name" autocomplete="name" required></label>

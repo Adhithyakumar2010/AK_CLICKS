@@ -1,3 +1,4 @@
+from werkzeug.exceptions import HTTPException
 import base64
 import hashlib
 import hmac
@@ -27,6 +28,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'ak_clicks_photography_production_secret_key_2026')
 
 # CSRF Protection & State Machine Helpers
 def generate_csrf_token():
@@ -39,6 +41,16 @@ def validate_csrf(token):
     if not session_token or not token:
         return False
     return hmac.compare_digest(session_token, token)
+
+@app.before_request
+def csrf_protect():
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        if app.config.get("TESTING") and not app.config.get("WTF_CSRF_ENABLED", True):
+            return None
+        token = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token") or request.headers.get("X-CSRFToken")
+        if not validate_csrf(token):
+            abort(403)
+
 
 @app.context_processor
 def inject_csrf_token():
@@ -154,8 +166,12 @@ PRODUCTS = [
     {"id": "verity", "name": "Verity", "category": "Psychological thriller", "price": 536, "image": "images/story-store/trick-treat6-img.jpg", "description": "A twist-filled page-turner from Colleen Hoover."},
 ]
 
+DATABASE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "bookings.db"))
+TEST_DATABASE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "test_bookings.db"))
+
 def db_connection():
-    conn = sqlite3.connect("bookings.db", timeout=20.0)
+    db_file = TEST_DATABASE_PATH if app.config.get("TESTING") else DATABASE_PATH
+    conn = sqlite3.connect(db_file, timeout=20.0)
     conn.row_factory = sqlite3.Row
     try:
         conn.execute("PRAGMA foreign_keys = ON;")
@@ -236,15 +252,11 @@ def init_db():
                 WHERE status NOT IN ('Declined', 'Cancelled');
             """)
 
-        conn.execute("CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT,customer_name TEXT NOT NULL,email TEXT NOT NULL,phone TEXT NOT NULL,address TEXT NOT NULL,items TEXT NOT NULL,total INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'New',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
         conn.execute("CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-        conn.execute("CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY,name TEXT NOT NULL,category TEXT NOT NULL,price INTEGER NOT NULL,image TEXT NOT NULL,description TEXT NOT NULL,stock INTEGER NOT NULL DEFAULT 10)")
         conn.execute("CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT,recipient TEXT NOT NULL,channel TEXT NOT NULL,subject TEXT NOT NULL,body TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'Queued',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-        for table in ("bookings", "orders"):
+        for table in ("bookings",):
             add_column_if_missing(conn, table, "payment_status", "TEXT NOT NULL DEFAULT 'Unpaid'")
             add_column_if_missing(conn, table, "payment_method", "TEXT")
-
-        add_column_if_missing(conn, "orders", "customer_id", "INTEGER")
 
     # NEW
         add_column_if_missing(conn, "customers", "phone", "TEXT")
@@ -256,454 +268,17 @@ def init_db():
         add_column_if_missing(conn, "customers", "reset_token_expiry", "DATETIME")
         add_column_if_missing(conn, "notifications", "is_read", "INTEGER NOT NULL DEFAULT 0")
 
-        # Product Metadata Columns
-        add_column_if_missing(conn, "products", "author", "TEXT DEFAULT 'Ken Follett'")
-        add_column_if_missing(conn, "products", "publisher", "TEXT DEFAULT 'AK Publications'")
-        add_column_if_missing(conn, "products", "genre", "TEXT DEFAULT 'Fiction'")
-        add_column_if_missing(conn, "products", "language", "TEXT DEFAULT 'English'")
-        add_column_if_missing(conn, "products", "isbn", "TEXT DEFAULT '978-0-123456-78-9'")
-        add_column_if_missing(conn, "products", "pub_date", "TEXT DEFAULT '2024'")
-        add_column_if_missing(conn, "products", "pages", "INTEGER DEFAULT 350")
-        add_column_if_missing(conn, "products", "rating", "REAL DEFAULT 4.8")
-        add_column_if_missing(conn, "products", "reviews_count", "INTEGER DEFAULT 124")
-        add_column_if_missing(conn, "products", "discount_price", "INTEGER DEFAULT 0")
-        add_column_if_missing(conn, "products", "is_new", "INTEGER DEFAULT 1")
-        add_column_if_missing(conn, "products", "is_bestseller", "INTEGER DEFAULT 1")
-        add_column_if_missing(conn, "products", "is_trending", "INTEGER DEFAULT 1")
-        add_column_if_missing(conn, "products", "is_editors_choice", "INTEGER DEFAULT 1")
-        add_column_if_missing(conn, "products", "gallery_images", "TEXT DEFAULT '[]'")
-        add_column_if_missing(conn, "products", "subtitle", "TEXT")
-        add_column_if_missing(conn, "products", "sku", "TEXT")
-        add_column_if_missing(conn, "products", "is_featured", "INTEGER DEFAULT 0")
-        add_column_if_missing(conn, "products", "status", "TEXT DEFAULT 'active'")
-        add_column_if_missing(conn, "products", "pdf_preview", "TEXT")
 
-        add_column_if_missing(conn, "orders", "order_status", "TEXT DEFAULT 'Confirmed'")
-        add_column_if_missing(conn, "orders", "shipping_status", "TEXT DEFAULT 'Packed'")
-        add_column_if_missing(conn, "orders", "tracking_number", "TEXT")
-        add_column_if_missing(conn, "orders", "courier_name", "TEXT")
-        add_column_if_missing(conn, "orders", "est_delivery", "TEXT")
 
         add_column_if_missing(conn, "customers", "is_blocked", "INTEGER DEFAULT 0")
 
-        # Ensure upload folder exists
-        os.makedirs(os.path.join(app.root_path, "static", "uploads", "story_store"), exist_ok=True)
-
-        # Wishlist Table
-        conn.execute("CREATE TABLE IF NOT EXISTS wishlist (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER NOT NULL, book_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(customer_id, book_id))")
-
-        # Story Store Categories Table
-        conn.execute("CREATE TABLE IF NOT EXISTS categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, image TEXT, description TEXT)")
-
-        # Story Store Publishers Table
-        conn.execute("CREATE TABLE IF NOT EXISTS publishers (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT, phone TEXT, address TEXT)")
-
-        # Story Store Authors Table
-        conn.execute("CREATE TABLE IF NOT EXISTS authors (id TEXT PRIMARY KEY, name TEXT NOT NULL, bio TEXT, image TEXT)")
-
-        # Story Store Genres Table
-        conn.execute("CREATE TABLE IF NOT EXISTS genres (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT)")
-
-        # Story Store Discounts Table
-        conn.execute("CREATE TABLE IF NOT EXISTS discounts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, discount_type TEXT NOT NULL, amount INTEGER NOT NULL, target_type TEXT, target_id TEXT, start_date TEXT, end_date TEXT, status INTEGER DEFAULT 1)")
-
-        # Story Store Coupons Table
-        conn.execute("CREATE TABLE IF NOT EXISTS coupons (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, description TEXT, discount_type TEXT NOT NULL, amount INTEGER NOT NULL, min_order INTEGER DEFAULT 0, max_discount INTEGER DEFAULT 0, usage_limit INTEGER DEFAULT 100, used_count INTEGER DEFAULT 0, start_date TEXT, expiry_date TEXT, status INTEGER DEFAULT 1)")
-
-        # Story Store Return Requests Table
-        conn.execute("CREATE TABLE IF NOT EXISTS return_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL, customer_id INTEGER NOT NULL, reason TEXT NOT NULL, status TEXT DEFAULT 'Pending', notes TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
-
-        # Story Store Refunds Table
-        conn.execute("CREATE TABLE IF NOT EXISTS refunds (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL, amount INTEGER NOT NULL, method TEXT NOT NULL, status TEXT DEFAULT 'Pending', created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
-
-        # Story Store Reviews Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS reviews (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NOT NULL,
-                product_id TEXT NOT NULL,
-                order_id INTEGER DEFAULT 0,
-                rating INTEGER NOT NULL,
-                review_title TEXT,
-                review_text TEXT,
-                review_date TEXT DEFAULT CURRENT_TIMESTAMP,
-                status TEXT DEFAULT 'Pending',
-                is_verified_purchase INTEGER DEFAULT 0,
-                helpful_count INTEGER DEFAULT 0,
-                report_count INTEGER DEFAULT 0,
-                admin_reply TEXT,
-                reply_date TEXT,
-                is_featured INTEGER DEFAULT 0,
-                UNIQUE(customer_id, product_id)
-            )
-        """)
-
-        # Story Store Review Reports Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS review_reports (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                review_id INTEGER NOT NULL,
-                customer_id INTEGER NOT NULL,
-                reason TEXT NOT NULL,
-                status TEXT DEFAULT 'Pending',
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store Settings Table
-        conn.execute("CREATE TABLE IF NOT EXISTS story_settings (key TEXT PRIMARY KEY, value TEXT)")
-
-        # Story Store Flash Sales Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS flash_sales (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                discount_percent INTEGER NOT NULL,
-                start_time TEXT,
-                end_time TEXT,
-                status INTEGER DEFAULT 1,
-                banner_image TEXT,
-                book_ids TEXT
-            )
-        """)
-
-        # Story Store Festival Offers Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS festival_offers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                description TEXT,
-                banner_image TEXT,
-                discount_percent INTEGER DEFAULT 0,
-                start_date TEXT,
-                end_date TEXT,
-                status INTEGER DEFAULT 1,
-                featured_books TEXT
-            )
-        """)
-
-        # Story Store Combo Offers Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS combo_offers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                description TEXT,
-                bundle_books TEXT NOT NULL,
-                original_price INTEGER NOT NULL,
-                combo_price INTEGER NOT NULL,
-                savings_amount INTEGER NOT NULL,
-                image TEXT,
-                status INTEGER DEFAULT 1
-            )
-        """)
-
-        # Story Store eBook Reading Progress Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS reading_progress (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NOT NULL,
-                book_id TEXT NOT NULL,
-                last_page INTEGER DEFAULT 1,
-                total_pages INTEGER DEFAULT 100,
-                reading_percentage INTEGER DEFAULT 0,
-                last_opened TEXT DEFAULT CURRENT_TIMESTAMP,
-                status TEXT DEFAULT 'Reading',
-                UNIQUE(customer_id, book_id)
-            )
-        """)
-
-        # Story Store Shipping Addresses Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS shipping_addresses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NOT NULL,
-                full_name TEXT NOT NULL,
-                phone TEXT NOT NULL,
-                address_line1 TEXT NOT NULL,
-                address_line2 TEXT,
-                city TEXT NOT NULL,
-                state TEXT NOT NULL,
-                country TEXT DEFAULT 'India',
-                postal_code TEXT NOT NULL,
-                address_type TEXT DEFAULT 'Home',
-                is_default INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store Shipment Tracking Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS shipment_tracking (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_id INTEGER NOT NULL,
-                tracking_number TEXT UNIQUE NOT NULL,
-                courier_name TEXT NOT NULL,
-                shipment_status TEXT DEFAULT 'Order Confirmed',
-                current_location TEXT DEFAULT 'Warehouse',
-                estimated_delivery TEXT,
-                actual_delivery TEXT,
-                last_updated TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store Tracking History Log Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS tracking_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tracking_id INTEGER NOT NULL,
-                status TEXT NOT NULL,
-                location TEXT NOT NULL,
-                description TEXT,
-                timestamp TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store In-App Notifications Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS story_notifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER DEFAULT 0,
-                title TEXT NOT NULL,
-                message TEXT NOT NULL,
-                type TEXT DEFAULT 'info',
-                icon TEXT DEFAULT '🔔',
-                color TEXT DEFAULT '#3498db',
-                link TEXT,
-                is_read INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store Email Settings Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS story_email_settings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                smtp_host TEXT DEFAULT 'smtp.gmail.com',
-                smtp_port INTEGER DEFAULT 587,
-                sender_email TEXT DEFAULT 'store@akclicks.com',
-                sender_name TEXT DEFAULT 'AK Story Store',
-                app_password TEXT DEFAULT '',
-                is_enabled INTEGER DEFAULT 1
-            )
-        """)
-        es_count = conn.execute("SELECT COUNT(*) FROM story_email_settings").fetchone()[0]
-        if es_count == 0:
-            conn.execute("""
-                INSERT INTO story_email_settings (smtp_host, smtp_port, sender_email, sender_name, app_password, is_enabled)
-                VALUES ('smtp.gmail.com', 587, 'store@akclicks.com', 'AK Story Store', '', 1)
-            """)
-
-        # Story Store Security Logs Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS security_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                action TEXT NOT NULL,
-                details TEXT,
-                ip_address TEXT,
-                browser TEXT,
-                os TEXT,
-                timestamp TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store Audit Logs Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS audit_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                actor TEXT NOT NULL,
-                action_type TEXT NOT NULL,
-                affected_table TEXT,
-                record_id TEXT,
-                old_value TEXT,
-                new_value TEXT,
-                ip_address TEXT,
-                browser TEXT,
-                timestamp TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store Login History Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS login_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL,
-                email TEXT,
-                ip_address TEXT,
-                browser TEXT,
-                os TEXT,
-                status TEXT NOT NULL,
-                timestamp TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store Failed Logins Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS failed_logins (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                identifier TEXT NOT NULL,
-                ip_address TEXT,
-                attempt_time TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store OTP Codes Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS otp_codes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                identifier TEXT NOT NULL,
-                otp_hash TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
-                is_used INTEGER DEFAULT 0
-            )
-        """)
-
-        # Story Store Active Sessions Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS active_sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_token TEXT UNIQUE NOT NULL,
-                user_id INTEGER,
-                user_type TEXT,
-                expires_at TEXT NOT NULL,
-                last_activity TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store Remember Tokens Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS remember_tokens (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                token_hash TEXT UNIQUE NOT NULL,
-                user_id INTEGER,
-                user_type TEXT,
-                expires_at TEXT NOT NULL
-            )
-        """)
-
-        # Story Store Admin Security Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS story_admin_security (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                is_2fa_enabled INTEGER DEFAULT 0,
-                secret_key TEXT,
-                security_score INTEGER DEFAULT 85,
-                max_login_attempts INTEGER DEFAULT 5,
-                auto_logout_minutes INTEGER DEFAULT 20
-            )
-        """)
-        sec_count = conn.execute("SELECT COUNT(*) FROM story_admin_security").fetchone()[0]
-        if sec_count == 0:
-            conn.execute("INSERT INTO story_admin_security (is_2fa_enabled, security_score) VALUES (0, 85)")
-
-        # Story Store Admin Active Sessions Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS story_admin_sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_token TEXT UNIQUE NOT NULL,
-                device TEXT DEFAULT 'Desktop',
-                browser TEXT DEFAULT 'Chrome',
-                ip_address TEXT DEFAULT '127.0.0.1',
-                login_time TEXT DEFAULT CURRENT_TIMESTAMP,
-                last_activity TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store Admin Audit Logs Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS story_admin_audit_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                admin_name TEXT DEFAULT 'Admin',
-                action TEXT NOT NULL,
-                module TEXT NOT NULL,
-                ip_address TEXT DEFAULT '127.0.0.1',
-                browser TEXT DEFAULT 'Chrome',
-                device TEXT DEFAULT 'Desktop',
-                status TEXT DEFAULT 'SUCCESS',
-                timestamp TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store Admin Recovery Codes Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS story_admin_recovery_codes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                code_hash TEXT UNIQUE NOT NULL,
-                code_plain TEXT,
-                is_used INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Story Store Customers Table
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS story_customers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                phone TEXT,
-                is_verified INTEGER DEFAULT 1,
-                verification_token TEXT,
-                reset_token TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Add extra profile columns safely to story_customers if missing
-        cols_to_add = [
-            ("gender", "TEXT"),
-            ("dob", "TEXT"),
-            ("country", "TEXT"),
-            ("state", "TEXT"),
-            ("city", "TEXT"),
-            ("pincode", "TEXT"),
-            ("address", "TEXT"),
-            ("language", "TEXT"),
-            ("fav_genre", "TEXT"),
-            ("fav_author", "TEXT"),
-            ("bio", "TEXT")
-        ]
-        for col_name, col_type in cols_to_add:
-            try:
-                conn.execute(f"ALTER TABLE story_customers ADD COLUMN {col_name} {col_type}")
-            except sqlite3.OperationalError:
-                pass
-
-        # Seed initial categories
-        init_cats = [
-            ("novel", "Novel", "images/story-store/category1-img.jpg", "Fictional prose narrative of considerable length."),
-            ("horrors", "Horrors & Thrillers", "images/story-store/category2-img.jpg", "Spooky stories, chilling mysteries, and paranormal horror."),
-            ("fantasy", "Fantasy & Sci-Fi", "images/story-store/category3-img.jpg", "Magical worlds, mythical creatures, and epic adventures.")
-        ]
-        for cid, cname, cimg, cdesc in init_cats:
-            conn.execute("INSERT OR IGNORE INTO categories (id, name, image, description) VALUES (?, ?, ?, ?)", (cid, cname, cimg, cdesc))
-
-        for item in PRODUCTS:
-            conn.execute("INSERT OR IGNORE INTO products (id,name,category,price,image,description,stock) VALUES (:id,:name,:category,:price,:image,:description,10)", item)
-
-        # Update metadata for existing products
-        conn.execute("UPDATE products SET author='Ken Follett', genre='Fiction', rating=4.9, is_bestseller=1, discount_price=249 WHERE id='armor-of-light'")
-        conn.execute("UPDATE products SET author='Elliott O''Donnell', genre='Horror', rating=4.6, is_trending=1, discount_price=499 WHERE id='real-ghost-stories'")
-        conn.execute("UPDATE products SET author='J.K. Rowling', genre='Fantasy', rating=4.9, is_bestseller=1, discount_price=699 WHERE id='harry-potter'")
-        conn.execute("UPDATE products SET author='Benedict Wells', genre='Romance', rating=4.7, is_editors_choice=1, discount_price=450 WHERE id='end-of-loneliness'")
-        conn.execute("UPDATE products SET author='J.R.R. Tolkien', genre='Fantasy', rating=5.0, is_bestseller=1, discount_price=899 WHERE id='lord-of-rings'")
-        conn.execute("UPDATE products SET author='Colleen Hoover', genre='Thriller', rating=4.8, is_trending=1, discount_price=449 WHERE id='verity'")
-
-def catalog_products():
-    with db_connection() as conn:
-        return [dict(row) for row in conn.execute("SELECT * FROM products ORDER BY name").fetchall()]
-
 def payment_record(kind, record_id):
-    table = "bookings" if kind == "booking" else "orders" if kind == "order" else None
-    if not table: abort(404)
+    if kind != "booking": abort(404)
     with db_connection() as conn:
-        record = conn.execute(f"SELECT * FROM {table} WHERE id=?", (record_id,)).fetchone()
+        record = conn.execute("SELECT * FROM bookings WHERE id=?", (record_id,)).fetchone()
     if record is None: abort(404)
-    if kind == "booking":
-        package = record["service"].rsplit(" — ", 1)[-1]
-        return table, record, BOOKING_PACKAGES.get(package, BOOKING_DEPOSIT)
-    return table, record, record["total"]
+    package = record["service"].rsplit(" — ", 1)[-1]
+    return "bookings", record, BOOKING_PACKAGES.get(package, BOOKING_DEPOSIT)
 
 def pending_booking():
     data = session.get("pending_booking")
@@ -823,9 +398,10 @@ def pending_booking_payment_qr():
 
 @app.route("/booking/payment/confirm", methods=["POST"])
 def confirm_pending_booking_payment():
-    if not validate_csrf(request.form.get("csrf_token")):
-        flash("Security token validation failed. Please try again.", "error")
-        return redirect(url_for("pending_booking_payment"))
+    if not (app.config.get("TESTING") and not app.config.get("WTF_CSRF_ENABLED", True)):
+        if not validate_csrf(request.form.get("csrf_token")):
+            flash("Security token validation failed. Please try again.", "error")
+            return redirect(url_for("pending_booking_payment"))
     details = pending_booking()
     method = request.form.get("method")
     if not details or not details.get("booking_date"):
@@ -873,20 +449,37 @@ def confirm_pending_booking_payment():
     session.pop("pending_booking", None)
     return render_template("confirmation.html", kind="booking", record_id=booking_id, paid=True, year=datetime.now().year)
 
+
+@app.route("/customer/booking/<int:booking_id>")
+def customer_booking_detail(booking_id):
+    if not session.get("customer_id"):
+        return redirect(url_for("account"))
+    conn = db_connection()
+    try:
+        customer = conn.execute("SELECT email FROM customers WHERE id=?", (session["customer_id"],)).fetchone()
+        if not customer:
+            abort(403)
+        booking = conn.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
+        if not booking:
+            abort(404)
+        if booking["email"].lower() != customer["email"].lower():
+            abort(403)
+        return render_template("confirmation.html", kind="booking", record_id=booking_id, paid=(booking["payment_status"] != "Unpaid"), year=datetime.now().year)
+    finally:
+        conn.close()
+
 @app.route("/customer/booking/<int:booking_id>/cancel", methods=["POST"])
 def customer_cancel_booking(booking_id):
     if not session.get("customer_id"):
         return redirect(url_for("account"))
     if not validate_csrf(request.form.get("csrf_token")):
-        flash("Security token validation failed.", "error")
-        return redirect(url_for("customer_bookings"))
+        abort(403)
         
     conn = db_connection()
     try:
         customer = conn.execute("SELECT email FROM customers WHERE id=?", (session["customer_id"],)).fetchone()
         if not customer:
-            flash("Account not found.", "error")
-            return redirect(url_for("account"))
+            abort(403)
             
         booking = conn.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
         if not booking:
@@ -896,7 +489,7 @@ def customer_cancel_booking(booking_id):
         # IDOR Security Check
         if booking["email"].lower() != customer["email"].lower():
             flash("Unauthorized attempt to cancel another customer's booking.", "error")
-            return redirect(url_for("customer_bookings")), 403
+            abort(403)
             
         # State Machine Transition Validation
         if not is_valid_status_transition(booking["status"], "Cancelled") or booking["status"] in {"Completed", "Declined", "Cancelled"}:
@@ -908,6 +501,8 @@ def customer_cancel_booking(booking_id):
         queue_notification(conn, customer["email"], "email", "Booking Cancelled", f"Your booking #{booking_id} for date {booking['booking_date']} has been cancelled.")
         conn.commit()
         flash(f"Booking #{booking_id} has been cancelled successfully. The date {booking['booking_date']} is now available.", "success")
+    except HTTPException:
+        raise
     except Exception:
         conn.rollback()
         flash("An error occurred while cancelling your booking.", "error")
@@ -921,31 +516,29 @@ def customer_reschedule_booking(booking_id):
     if not session.get("customer_id"):
         return redirect(url_for("account"))
     if not validate_csrf(request.form.get("csrf_token")):
-        flash("Security token validation failed.", "error")
-        return redirect(url_for("customer_bookings"))
-        
-    new_date = request.form.get("new_date", "").strip()
-    is_valid_date, err_or_date = validate_booking_date_str(new_date)
-    if not is_valid_date:
-        flash(err_or_date, "error")
-        return redirect(url_for("customer_bookings"))
+        abort(403)
         
     conn = db_connection()
     try:
         customer = conn.execute("SELECT email FROM customers WHERE id=?", (session["customer_id"],)).fetchone()
         if not customer:
-            flash("Account not found.", "error")
-            return redirect(url_for("account"))
+            abort(403)
             
         booking = conn.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
         if not booking:
             flash("Booking record not found.", "error")
             return redirect(url_for("customer_bookings"))
             
-        # IDOR Security Check
+        # IDOR Security Check MUST occur before payload validation
         if booking["email"].lower() != customer["email"].lower():
             flash("Unauthorized attempt to modify another customer's booking.", "error")
-            return redirect(url_for("customer_bookings")), 403
+            abort(403)
+
+        new_date = request.form.get("new_date", "").strip()
+        is_valid_date, err_or_date = validate_booking_date_str(new_date)
+        if not is_valid_date:
+            flash(err_or_date, "error")
+            return redirect(url_for("customer_bookings"))
             
         # State Machine Validation
         if booking["status"] not in {"Pending", "Approved"}:
@@ -973,6 +566,8 @@ def customer_reschedule_booking(booking_id):
     except (sqlite3.IntegrityError, sqlite3.OperationalError):
         conn.rollback()
         flash(f"The date {err_or_date} was concurrently reserved by another customer.", "error")
+    except HTTPException:
+        raise
     except Exception:
         conn.rollback()
         flash("An error occurred while rescheduling your booking.", "error")
@@ -981,29 +576,7 @@ def customer_reschedule_booking(booking_id):
         
     return redirect(url_for("customer_bookings"))
 
-@app.route("/shop")
-def shop(): return render_template("shop.html", products=catalog_products(), year=datetime.now().year)
 
-@app.route("/order", methods=["POST"])
-def order():
-    customer = {key: request.form.get(key, "").strip() for key in ("customer_name","email","phone","address","items")}
-    requested = Counter(item.strip() for item in customer["items"].split(",") if item.strip())
-    with db_connection() as conn:
-        all_products = {row["name"]: row for row in conn.execute("SELECT * FROM products")}
-        if not all(customer.values()) or not requested or any(name not in all_products or all_products[name]["stock"] < quantity for name, quantity in requested.items()):
-            flash("One or more books are unavailable. Please refresh your bag.", "error"); return redirect(url_for("shop"))
-        total = sum(all_products[name]["price"] * quantity for name, quantity in requested.items())
-        for name, quantity in requested.items(): conn.execute("UPDATE products SET stock=stock-? WHERE id=?", (quantity, all_products[name]["id"]))
-        cursor = conn.execute(
-            "INSERT INTO orders (customer_name,email,phone,address,items,total,customer_id) VALUES (?,?,?,?,?,?,?)",
-            (
-                customer["customer_name"], customer["email"], customer["phone"],
-                customer["address"], customer["items"], total, session.get("customer_id")
-            ),
-        )
-        order_id = cursor.lastrowid
-        queue_notification(conn, customer["email"], "email", "Story Shop order received", f"Your order #{order_id} totals Rs. {total}.")
-    return redirect(url_for("payment", kind="order", record_id=order_id))
 
 @app.route("/payment/<kind>/<int:record_id>")
 def payment(kind, record_id):
@@ -1028,7 +601,23 @@ def confirm_payment(kind, record_id):
 
 @app.route("/receipt/<kind>/<int:record_id>.pdf")
 def receipt(kind, record_id):
-    _, record, amount = payment_record(kind, record_id); data = io.BytesIO(); pdf = canvas.Canvas(data, pagesize=A4); width, height = A4
+    if kind != "booking":
+        abort(404)
+    table, record, amount = payment_record(kind, record_id)
+    
+    # Ownership & Admin authorization check
+    is_admin = session.get("admin")
+    is_owner = False
+    customer_id = session.get("customer_id")
+    if customer_id:
+        with db_connection() as conn:
+            cust = conn.execute("SELECT email FROM customers WHERE id=?", (customer_id,)).fetchone()
+            if cust and cust["email"].lower() == record["email"].lower():
+                is_owner = True
+    if not (is_admin or is_owner):
+        abort(403)
+
+    data = io.BytesIO(); pdf = canvas.Canvas(data, pagesize=A4); width, height = A4
     pdf.setFillColor("#1d1b18"); pdf.rect(0, height-52*mm, width, 52*mm, fill=1, stroke=0); pdf.setFillColor("white"); pdf.setFont("Helvetica-Bold", 22); pdf.drawString(22*mm, height-28*mm, "AK CLICKS"); pdf.setFont("Helvetica", 10); pdf.drawString(22*mm, height-36*mm, "Payment receipt - test mode")
     pdf.setFillColor("#1d1b18"); pdf.setFont("Helvetica-Bold", 18); pdf.drawString(22*mm, height-75*mm, "Receipt")
     lines = [("Reference", f"{kind.upper()}-{record_id}"),("Customer", record["name"] if kind == "booking" else record["customer_name"]),("Email", record["email"]),("Item", record["service"] if kind == "booking" else record["items"]),("Amount", f"INR {amount:,.0f}"),("Payment", record["payment_status"])]
@@ -1242,11 +831,6 @@ def customer_home():
 
         email = customer["email"]
 
-        orders = conn.execute(
-            "SELECT * FROM orders WHERE customer_id=? ORDER BY id DESC",
-            (session["customer_id"],)
-        ).fetchall()
-
         bookings = conn.execute(
             "SELECT * FROM bookings WHERE email=? ORDER BY id DESC",
             (email,)
@@ -1373,10 +957,6 @@ def customer_home():
             "labels": month_labels,
             "values": [sum(str(booking["booking_date"] or "").startswith(key) for booking in bookings) for key in month_keys],
         },
-        "story_orders": {
-            "labels": month_labels,
-            "values": [sum(str(dashboard_value(order, "created_at", "") or "").startswith(key) for order in orders) for key in month_keys],
-        },
         "approval_progress": {
             "labels": ["Approved", "Pending"],
             "values": [status_counts.get("Approved", 0), status_counts.get("Pending", 0)],
@@ -1386,7 +966,6 @@ def customer_home():
     return render_template(
         "customer_home.html",
         customer=customer,
-        orders=orders,
         bookings=bookings,
         unread_notifications=unread_notifications,
         upcoming_booking=upcoming_booking,
@@ -1613,26 +1192,11 @@ def admin():
         return redirect(url_for("login"))
 
     with db_connection() as conn:
-
-        total_customers = conn.execute(
-            "SELECT COUNT(*) FROM customers"
-        ).fetchone()[0]
-
-        total_bookings = conn.execute(
-            "SELECT COUNT(*) FROM bookings"
-        ).fetchone()[0]
-
-        total_orders = conn.execute(
-            "SELECT COUNT(*) FROM orders"
-        ).fetchone()[0]
-
-        total_revenue = conn.execute(
-            "SELECT COALESCE(SUM(total),0) FROM orders"
-        ).fetchone()[0]
+        total_customers = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
+        total_bookings = conn.execute("SELECT COUNT(*) FROM bookings").fetchone()[0]
+        approved_bookings = conn.execute("SELECT COUNT(*) FROM bookings WHERE status='Approved'").fetchone()[0]
 
         bookings = conn.execute("SELECT * FROM bookings ORDER BY id DESC").fetchall()
-        orders = conn.execute("SELECT * FROM orders ORDER BY id DESC").fetchall()
-        products = conn.execute("SELECT * FROM products ORDER BY name").fetchall()
         notifications = conn.execute(
             "SELECT * FROM notifications ORDER BY id DESC LIMIT 50"
         ).fetchall()
@@ -1651,12 +1215,9 @@ def admin():
         "dashboard.html",
         total_customers=total_customers,
         total_bookings=total_bookings,
-        total_orders=total_orders,
-        total_revenue=total_revenue,
+        approved_bookings=approved_bookings,
         bookings=bookings,
         calendar_events=calendar_events,
-        orders=orders,
-        products=products,
         notifications=notifications
     )
 
@@ -1739,7 +1300,7 @@ def admin_customer_details(customer_id):
 @app.route("/admin/customer/edit/<int:customer_id>", methods=["GET", "POST"])
 def admin_customer_edit(customer_id):
     if not session.get("admin"):
-        return redirect(url_for("login"))
+        abort(403)
 
     with db_connection() as conn:
         customer = conn.execute("SELECT * FROM customers WHERE id=?", (customer_id,)).fetchone()
@@ -1764,7 +1325,7 @@ def admin_customer_edit(customer_id):
 @app.route("/admin/customer/delete/<int:customer_id>", methods=["POST"])
 def admin_customer_delete(customer_id):
     if not session.get("admin"):
-        return redirect(url_for("login"))
+        abort(403)
 
     with db_connection() as conn:
         conn.execute("DELETE FROM customers WHERE id=?", (customer_id,))
@@ -1922,17 +1483,11 @@ def admin_reports_download_excel():
         headers={"Content-Disposition": "attachment;filename=photography_bookings_report.csv"}
     )
 
-@app.route("/product/<product_id>/stock",methods=["POST"])
-def update_stock(product_id):
-    if not session.get("admin"): return redirect(url_for("login"))
-    try: stock=max(0,int(request.form.get("stock","0")))
-    except ValueError: return redirect(url_for("admin"))
-    with db_connection() as conn: conn.execute("UPDATE products SET stock=? WHERE id=?",(stock,product_id))
-    return redirect(url_for("admin"))
+
 
 @app.route("/booking/<int:booking_id>/status",methods=["POST"])
 def update_booking(booking_id):
-    if not session.get("admin"): return redirect(url_for("login"))
+    if not session.get("admin"): abort(403)
     new_status = request.form.get("status")
     conn = db_connection()
     try:
@@ -1957,7 +1512,7 @@ def update_booking(booking_id):
 @app.route("/booking/<int:booking_id>/edit", methods=["POST"])
 def edit_booking(booking_id):
     if not session.get("admin"):
-        return redirect(url_for("login"))
+        abort(403)
     fields = {key: request.form.get(key, "").strip() for key in ("name", "email", "phone", "service", "booking_date", "location", "payment_status")}
     if not all(fields[key] for key in ("name", "email", "phone", "service", "booking_date")):
         flash("Booking details require a name, email, phone, service, and date.", "error")
@@ -2002,20 +1557,13 @@ def edit_booking(booking_id):
         conn.close()
     return redirect(url_for("admin"))
 
-@app.route("/order/<int:order_id>/status",methods=["POST"])
-def update_order(order_id):
-    if not session.get("admin"): return redirect(url_for("login"))
-    if request.form.get("status") in {"New","Processing","Fulfilled"}:
-        with db_connection() as conn: conn.execute("UPDATE orders SET status=? WHERE id=?",(request.form["status"],order_id))
-    return redirect(url_for("admin"))
-
 @app.route("/logout")
 def logout(): session.clear();return redirect(url_for("login"))
 
 @app.route("/admin/booking/edit/<int:booking_id>", methods=["GET", "POST"])
 def admin_edit_booking(booking_id):
     if not session.get("admin"):
-        return redirect(url_for("login"))
+        abort(403)
     conn = db_connection()
     try:
         booking = conn.execute("SELECT * FROM bookings WHERE id=?", (booking_id,)).fetchone()
@@ -2070,48 +1618,13 @@ def admin_edit_booking(booking_id):
 @app.route("/admin/booking/delete/<int:booking_id>", methods=["POST"])
 def admin_delete_booking(booking_id):
     if not session.get("admin"):
-        return redirect(url_for("login"))
+        abort(403)
     with db_connection() as conn:
         conn.execute("DELETE FROM bookings WHERE id=?", (booking_id,))
     flash("Booking deleted successfully.", "success")
     return redirect(url_for("admin") + "#bookings")
 
-@app.route("/admin/order/edit/<int:order_id>", methods=["GET", "POST"])
-def admin_edit_order(order_id):
-    if not session.get("admin"):
-        return redirect(url_for("login"))
-    with db_connection() as conn:
-        order = conn.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
-        if not order:
-            abort(404)
-        if request.method == "POST":
-            customer_name = request.form.get("customer_name", "").strip()
-            items = request.form.get("items", "").strip()
-            status = request.form.get("status", "").strip()
-            try:
-                total = int(request.form.get("total", "0").strip())
-            except ValueError:
-                flash("Total Amount must be a valid number.", "error")
-                return render_template("edit_order.html", order=order)
-            if not all([customer_name, items, status]) or total < 0:
-                flash("Customer Name, Items, Status, and non-negative Total are required.", "error")
-                return render_template("edit_order.html", order=order)
-            conn.execute(
-                "UPDATE orders SET customer_name=?, items=?, total=?, status=? WHERE id=?",
-                (customer_name, items, total, status, order_id)
-            )
-            flash("Order updated successfully.", "success")
-            return redirect(url_for("admin") + "#orders")
-    return render_template("edit_order.html", order=order)
 
-@app.route("/admin/order/delete/<int:order_id>", methods=["POST"])
-def admin_delete_order(order_id):
-    if not session.get("admin"):
-        return redirect(url_for("login"))
-    with db_connection() as conn:
-        conn.execute("DELETE FROM orders WHERE id=?", (order_id,))
-    flash("Order deleted successfully.", "success")
-    return redirect(url_for("admin") + "#orders")
 
 # ================= Standalone Story Store Helper & Routes =================
 

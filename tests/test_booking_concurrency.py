@@ -29,12 +29,15 @@ class TestBookingConcurrencyAndHardening(unittest.TestCase):
             return conn
             
         import app as app_module
+        self.original_db_connection = app_module.db_connection
         app_module.db_connection = temp_db_connection
         
         with app.app_context():
             init_db()
 
     def tearDown(self):
+        import app as app_module
+        app_module.db_connection = self.original_db_connection
         try:
             if os.path.exists(self.db_filename):
                 os.remove(self.db_filename)

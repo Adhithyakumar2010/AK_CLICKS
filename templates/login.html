@@ -10,9 +10,10 @@
 <body class="auth-page">
   <main class="auth-card">
     <a class="auth-brand" href="{{ url_for('home') }}">AK <span>CLICKS</span></a>
-    <p class="eyebrow">Customer account</p><h1>Welcome back.</h1><p class="auth-intro">Sign in to follow your bookings, orders, payments, and notifications.</p>
+    <p class="eyebrow">Customer account</p><h1>Welcome back.</h1><p class="auth-intro">Sign in to follow your bookings, payments, and notifications.</p>
     {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<p class="form-message {{ category }}">{{ message }}</p>{% endfor %}{% endwith %}
     <form method="post" action="{{ url_for('account') }}" class="auth-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="action" value="login">
       <label>Email address<input type="email" name="email" autocomplete="email" required></label>
       <label>Password<input type="password" name="password" autocomplete="current-password" required></label>

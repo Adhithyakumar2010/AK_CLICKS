@@ -107,10 +107,6 @@ renderChart('monthly-bookings-chart', 'monthly_bookings', {
   type: 'line', label: 'Bookings', borderColor: '#a95d43', backgroundColor: 'rgba(169, 93, 67, .14)',
   emptyMessage: 'No monthly bookings to display yet.',
 });
-renderChart('story-orders-chart', 'story_orders', {
-  type: 'bar', label: 'Orders', backgroundColor: '#d49a3a', borderColor: '#d49a3a',
-  emptyMessage: 'No Story Shop orders to display yet.',
-});
 renderChart('approval-progress-chart', 'approval_progress', {
   type: 'doughnut', label: 'Bookings', backgroundColor: ['#5a9a70', '#d49a3a'],
   emptyMessage: 'No approved or pending bookings yet.',

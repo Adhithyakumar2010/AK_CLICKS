@@ -73,8 +73,8 @@
     <ul>
         <li><a href="{{ url_for('admin') }}">🏠 Dashboard</a></li>
         <li><a href="{{ url_for('admin') }}#bookings">📅 Bookings</a></li>
-        <li><a href="{{ url_for('admin') }}#orders">🛒 Orders</a></li>
-        <li><a href="{{ url_for('admin') }}#products">📚 Products</a></li>
+        <li><a href="{{ url_for('admin_customers') }}">👤 Customers</a></li>
+        <li><a href="{{ url_for('admin_reports') }}">📊 Reports</a></li>
         <li><a href="{{ url_for('home') }}">🌐 Website</a></li>
         <li><a href="{{ url_for('logout') }}">🚪 Logout</a></li>
     </ul>
@@ -99,6 +99,7 @@
     <div class="edit-card">
         <h2>Booking Details</h2>
         <form method="post" action="{{ url_for('admin_edit_booking', booking_id=booking.id) }}" class="edit-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label>Booking ID (Read-only)
                 <input type="text" value="#{{ booking.id }}" disabled style="background:#f0f0f0;">
             </label>

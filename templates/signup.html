@@ -13,6 +13,7 @@
     <p class="eyebrow">Customer account</p><h1>Start your story.</h1><p class="auth-intro">Create an account to manage every AK CLICKS booking and purchase in one place.</p>
     {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<p class="form-message {{ category }}">{{ message }}</p>{% endfor %}{% endwith %}
     <form method="post" action="{{ url_for('account') }}" class="auth-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="action" value="register">
       <label>Full name<input name="name" autocomplete="name" required></label>
       <label>Email address<input type="email" name="email" autocomplete="email" required></label>
